@@ -62,15 +62,16 @@
 
         <div class="bg-white p-6 rounded-xl shadow-md">
             <h2 class="text-xl font-bold mb-4">Configuración y Carga de Datos</h2>
+            <p class="text-sm text-gray-600 mb-4">Para un correcto funcionamiento, por favor cargue los archivos en el orden presentado: 1. Listas, 2. Escuelas, y finalmente 3. Fiscales.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <!-- Cargar Fiscales -->
+                <!-- Cargar Listas -->
                 <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
-                    <h3 class="font-semibold text-lg mb-2">1. Cargar Fiscales</h3>
-                    <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `escuela{id}@fiscal.app` con el DNI como contraseña.</p>
-                    <a href='data:text/csv;charset=utf-8,escuela_id,dni%0A15,12345678%0A22,87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
-                    <form class="space-y-3 mt-auto" data-upload-type="fiscales">
+                    <h3 class="font-semibold text-lg mb-2">1. Cargar Listas</h3>
+                    <p class="text-xs text-gray-500 mb-2">CSV con columnas: `id`, `nombre_lista`.</p>
+                     <a href='data:text/csv;charset=utf-8,id,nombre_lista%0Alista_01,CONSTRUYENDO PORVENIR%0Alista_02,ACCION VECINAL' download="listas_ejemplo_consolidadas.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                    <form class="space-y-3 mt-auto" data-upload-type="listas">
                         <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
-                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Fiscales</button>
+                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Listas</button>
                     </form>
                 </div>
                 <!-- Cargar Escuelas -->
@@ -83,14 +84,14 @@
                         <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Escuelas</button>
                     </form>
                 </div>
-                <!-- Cargar Listas -->
+                <!-- Cargar Fiscales -->
                 <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
-                    <h3 class="font-semibold text-lg mb-2">3. Cargar Listas</h3>
-                    <p class="text-xs text-gray-500 mb-2">CSV con columnas: `id`, `nombre_lista`.</p>
-                     <a href='data:text/csv;charset=utf-8,id,nombre_lista%0Alista_01,CONSTRUYENDO PORVENIR%0Alista_02,ACCION VECINAL' download="listas_ejemplo_consolidadas.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
-                    <form class="space-y-3 mt-auto" data-upload-type="listas">
+                    <h3 class="font-semibold text-lg mb-2">3. Cargar Fiscales</h3>
+                    <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `escuela{id}@fiscal.app` con el DNI como contraseña.</p>
+                    <a href='data:text/csv;charset=utf-8,escuela_id,dni%0A15,12345678%0A22,87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                    <form class="space-y-3 mt-auto" data-upload-type="fiscales">
                         <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
-                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Listas</button>
+                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Fiscales</button>
                     </form>
                 </div>
             </div>
