@@ -14,13 +14,22 @@
     </style>
 </head>
 <body class="text-gray-800">
-
+    <script>
+        // Script de seguridad para verificar el login del admin
+        if (sessionStorage.getItem('admin-auth-token') !== 'logged_in') {
+            // Redirigir si no está logueado
+            window.location.replace('admin_login.html');
+        }
+    </script>
     <header class="bg-white shadow-md">
         <div class="container mx-auto px-4 py-4 flex justify-between items-center">
             <h1 class="text-2xl font-bold text-gray-900">Dashboard de Fiscalización</h1>
-            <div>
-                <p class="font-semibold">Elecciones 2025</p>
-                <p class="text-sm text-gray-500">San Isidro</p>
+            <div class="flex items-center">
+                <div class="text-right mr-4">
+                    <p class="font-semibold">Elecciones 2025</p>
+                    <p class="text-sm text-gray-500">San Isidro</p>
+                </div>
+                <button id="logout-button" class="text-sm font-medium text-red-600 hover:text-red-800 bg-red-100 px-3 py-1 rounded-lg">Salir</button>
             </div>
         </div>
     </header>
@@ -53,30 +62,11 @@
 
         <div class="bg-white p-6 rounded-xl shadow-md">
             <h2 class="text-xl font-bold mb-4">Configuración y Carga de Datos</h2>
+            <p class="text-sm text-gray-600 mb-4">Para un correcto funcionamiento, por favor cargue los archivos en el orden presentado: 1. Listas, 2. Escuelas, y finalmente 3. Fiscales.</p>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <!-- Cargar Fiscales -->
-                <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
-                    <h3 class="font-semibold text-lg mb-2">1. Cargar Fiscales</h3>
-                    <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `escuela{id}@fiscal.app` con el DNI del fiscal general asignado como contraseña.</p>
-                    <a href='data:text/csv;charset=utf-8,escuela_id,dni%0A15,12345678%0A22,87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
-                    <form class="space-y-3 mt-auto" data-upload-type="fiscales">
-                        <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
-                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Fiscales</button>
-                    </form>
-                </div>
-                <!-- Cargar Escuelas -->
-                <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
-                    <h3 class="font-semibold text-lg mb-2">2. Cargar Escuelas</h3>
-                    <p class="text-xs text-gray-500 mb-2">CSV con: `id`, `nombre`, `lat`, `lng`, `mesas` (separadas por coma: "7001,7002").</p>
-                    <a href='data:text/csv;charset=utf-8,id,nombre,lat,lng,mesas%0A1,Escuela San Martín,-34.468,-58.515,"1001,1002"%0A15,"E.P. N°1 Sarmiento",-34.47,-58.52,"7001,7002"' download="escuelas_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
-                    <form class="space-y-3 mt-auto" data-upload-type="escuelas">
-                        <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
-                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Escuelas</button>
-                    </form>
-                </div>
                 <!-- Cargar Listas -->
                 <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
-                    <h3 class="font-semibold text-lg mb-2">3. Cargar Listas</h3>
+                    <h3 class="font-semibold text-lg mb-2">1. Cargar Listas</h3>
                     <p class="text-xs text-gray-500 mb-2">CSV con columnas: `id`, `nombre_lista`.</p>
                      <a href='data:text/csv;charset=utf-8,id,nombre_lista%0Alista_01,CONSTRUYENDO PORVENIR%0Alista_02,ACCION VECINAL' download="listas_ejemplo_consolidadas.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
                     <form class="space-y-3 mt-auto" data-upload-type="listas">
@@ -84,8 +74,28 @@
                         <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Listas</button>
                     </form>
                 </div>
+                <!-- Cargar Escuelas -->
+                <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
+                    <h3 class="font-semibold text-lg mb-2">2. Cargar Escuelas</h3>
+                    <p class="text-xs text-gray-500 mb-2">CSV con: `id`, `nombre`, `lat`, `lng`, `mesas` (separadas por coma: "1001,1002").</p>
+                    <a href='data:text/csv;charset=utf-8,id,nombre,lat,lng,mesas%0A1,Escuela San Martín,-34.468,-58.515,"1001,1002"%0A15,"E.P. N°1 Sarmiento",-34.47,-58.52,"7001,7002"' download="escuelas_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                    <form class="space-y-3 mt-auto" data-upload-type="escuelas">
+                        <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
+                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Escuelas</button>
+                    </form>
+                </div>
+                <!-- Cargar Fiscales -->
+                <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
+                    <h3 class="font-semibold text-lg mb-2">3. Cargar Fiscales</h3>
+                    <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `escuela{id}@fiscal.app` con el DNI como contraseña.</p>
+                    <a href='data:text/csv;charset=utf-8,escuela_id,dni%0A15,12345678%0A22,87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                    <form class="space-y-3 mt-auto" data-upload-type="fiscales">
+                        <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
+                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Fiscales</button>
+                    </form>
+                </div>
             </div>
-             <p id="upload-feedback" class="text-center text-green-600 font-medium mt-4"></p>
+             <p id="upload-feedback" class="text-center font-medium mt-4"></p>
         </div>
     </main>
 
@@ -93,6 +103,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="module">
         import { app, db } from '/firebase-config.js';
+        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-functions.js";
         import { collection, onSnapshot, collectionGroup, query, setDoc, doc, writeBatch } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
         // --- GLOBAL STATE ---
@@ -102,13 +113,19 @@
         let mapMarkers = {};
         let currentChartCategory = 'concejales';
 
+        // --- LOGOUT ---
+        const logoutButton = document.getElementById('logout-button');
+        logoutButton.addEventListener('click', () => {
+            sessionStorage.removeItem('admin-auth-token');
+            window.location.href = 'admin_login.html';
+        });
+
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
             initMap();
             setupChartToggle();
             setupUploadForms();
-            
-            // Listen for real-time updates
+
             listenToListas();
             listenToEscuelas();
             listenToMesas();
@@ -153,7 +170,7 @@
                 updateDashboard();
             });
         }
-        
+
         // --- DASHBOARD UPDATES ---
         function updateDashboard() {
             if (Object.keys(globalData.listas).length === 0 || Object.keys(globalData.escuelas).length === 0) return;
@@ -165,7 +182,7 @@
         function updateKPIs() {
             const escuelasArray = Object.values(globalData.escuelas);
             const mesasArray = Object.values(globalData.mesas);
-            
+
             const totalMesasSistema = escuelasArray.reduce((acc, esc) => acc + (esc.mesas?.length || 0), 0);
             const mesasCargadas = mesasArray.length;
             document.getElementById('kpi-mesas-cargadas').textContent = `${mesasCargadas}/${totalMesasSistema}`;
@@ -178,7 +195,7 @@
             });
             const participacion = totalHabilitados > 0 ? (totalVotantes / totalHabilitados * 100).toFixed(2) : 0;
             document.getElementById('kpi-participacion').textContent = `${participacion}%`;
-            
+
             let escuelasCerradasCount = 0;
             escuelasArray.forEach(esc => {
                 const mesasDeLaEscuela = mesasArray.filter(m => m.escuelaId === esc.id);
@@ -199,7 +216,7 @@
         function updateChart() {
             const ctx = document.getElementById('resultsChart').getContext('2d');
             if (resultsChartInstance) resultsChartInstance.destroy();
-            
+
             const votosPorLista = {};
             Object.keys(globalData.listas).forEach(id => { votosPorLista[id] = 0 });
 
@@ -210,7 +227,7 @@
                     }
                 }
             });
-            
+
             const listasArray = Object.entries(globalData.listas).map(([id, data]) => ({id, ...data}));
             const chartData = listasArray.map(l => votosPorLista[l.id]).filter(v => v > 0);
             const chartLabels = listasArray.filter(l => votosPorLista[l.id] > 0).map(l => l.nombre_lista);
@@ -239,7 +256,7 @@
                 updateDashboard();
             });
         }
-        
+
         // --- MAP ---
         function initMap() {
             map = L.map('map').setView([-34.47, -58.52], 14);
@@ -255,7 +272,7 @@
                 const mesasDeLaEscuela = mesasArray.filter(m => m.escuelaId === escuela.id);
                 const mesasCerradas = mesasDeLaEscuela.filter(m => m.estado === 'cerrada');
                 const isCerrada = escuela.mesas?.length > 0 && mesasCerradas.length === escuela.mesas.length;
-                
+
                 const popupContent = `<b>${escuela.nombre}</b><br>Mesas cargadas: ${mesasDeLaEscuela.length}/${escuela.mesas?.length || 0}`;
 
                 if (mapMarkers[escuela.id]) {
@@ -265,7 +282,7 @@
                 }
             });
         }
-        
+
         // --- CSV UPLOAD ---
         function setupUploadForms() {
             document.querySelectorAll('form[data-upload-type]').forEach(form => {
@@ -273,20 +290,30 @@
                     e.preventDefault();
                     const type = form.dataset.uploadType;
                     const file = e.target.querySelector('input[type="file"]').files[0];
-                    if (!file) { alert("Seleccione un archivo."); return; }
-                    
+                    if (!file) { showUploadFeedback("Seleccione un archivo.", true); return; }
+
                     const button = e.target.querySelector('button');
                     button.textContent = "Cargando...";
                     button.disabled = true;
 
                     try {
                         const text = await file.text();
-                        const data = parseCSV(text);
-                        await uploadData(type, data);
-                        showUploadFeedback(`¡${data.length} registros de ${type} cargados!`);
+                        if (type === 'fiscales') {
+                            const createUsers = httpsCallable(getFunctions(app), 'createUsersFromCSV');
+                            const result = await createUsers({ csv: text });
+                            showUploadFeedback(result.data.message, result.data.errorCount > 0);
+                             if (result.data.details && result.data.details.length > 0) {
+                                console.warn("Detalles de la carga:", result.data.details);
+                            }
+                        } else {
+                            const data = parseCSV(text);
+                            await uploadData(type, data);
+                            showUploadFeedback(`¡${data.length} registros de ${type} cargados!`);
+                        }
                     } catch (err) {
                         console.error("Error en carga:", err);
-                        showUploadFeedback(`Error: ${err.message}`, true);
+                        const errorMessage = err.message || "Ocurrió un error desconocido.";
+                        showUploadFeedback(`Error: ${errorMessage}`, true);
                     } finally {
                         button.textContent = `Cargar ${type.charAt(0).toUpperCase() + type.slice(1)}`;
                         button.disabled = false;
@@ -307,7 +334,7 @@
                 }, {});
             });
         }
-        
+
         async function uploadData(type, data) {
             const batch = writeBatch(db);
             switch(type) {
@@ -324,35 +351,27 @@
                             nombre: item.nombre,
                             lat: parseFloat(item.lat),
                             lng: parseFloat(item.lng),
-                            mesas: item.mesas.split(';').map(m => m.trim())
+                            mesas: item.mesas.split(',').map(m => m.trim()) // BUG FIX: Changed from ';' to ','
                         });
                     });
                     break;
-                case 'fiscales':
-                    // Nota: Esto NO crea usuarios en Firebase Auth.
-                    // Debes crear los usuarios en la consola de Firebase primero.
-                    // Esto solo crea el documento de mapeo en Firestore.
-                    alert("Importante: La carga de Fiscales por CSV solo crea el registro en la base de datos. Usted debe crear manualmente cada usuario (email/contraseña) en la sección 'Authentication' de la consola de Firebase.");
-                    data.forEach(item => {
-                        // El UID del usuario se debe obtener de Firebase Auth y colocarlo aquí
-                        // Por ahora, usamos un placeholder. Esto requiere un paso manual o un script de Node.js
-                        const uidPlaceholder = `uid_for_escuela_${item.escuela_id}`;
-                        const docRef = doc(db, "fiscales", uidPlaceholder);
-                        batch.set(docRef, { escuela_id: item.escuela_id, dni: item.dni });
-                    });
-                    break;
+                // 'fiscales' case is now handled by the Cloud Function
             }
-            await batch.commit();
+            if (type !== 'fiscales') {
+               await batch.commit();
+            }
         }
 
         function showUploadFeedback(message, isError = false) {
             const feedbackEl = document.getElementById('upload-feedback');
             feedbackEl.textContent = message;
             feedbackEl.className = `text-center font-medium mt-4 ${isError ? 'text-red-600' : 'text-green-600'}`;
-            setTimeout(() => { feedbackEl.textContent = ''; }, 5000);
+            // Don't auto-hide for errors
+            if (!isError) {
+                setTimeout(() => { feedbackEl.textContent = ''; }, 6000);
+            }
         }
 
     </script>
 </body>
 </html>
-
