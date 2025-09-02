@@ -36,9 +36,9 @@ exports.createUsersFromCSV = functions.https.onCall(async (data, context) => {
         // Basic auth check: in a real app, you'd check if the caller is an admin
         // For now, we trust the security rule on the admin page itself.
 
-        const csvData = data.csv;
-        if (typeof csvData !== 'string' || csvData.length === 0) {
-            throw new functions.https.HttpsError('invalid-argument', 'El archivo CSV está vacío o el formato de los datos no es correcto.');
+        const csvData = typeof data === 'string' ? data : data?.csv;
+        if (typeof csvData !== 'string' || csvData.trim().length === 0) {
+            throw new functions.https.HttpsError('invalid-argument', 'No se proporcionaron datos CSV.');
         }
 
         let parsedData;
