@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow public read access for the dashboard
+    match /listas/{lista} {
+      allow read: if true;
+      allow write: if true; // Allow writes from admin panel
+    }
+    match /escuelas/{escuela} {
+      allow read: if true;
+      allow write: if true; // Allow writes from admin panel
+    }
+
+    // The dashboard uses a collection group query on 'mesas'.
+    // This rule allows any client to query the 'mesas' collection group.
+    match /{path=**}/mesas/{mesa} {
+        allow read: if true;
+        allow write: if request.auth != null;
+    }
+
+    // Fiscales can only be created by the cloud function (admin)
+    // and can only be read/written by the authenticated fiscal.
+    match /fiscales/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

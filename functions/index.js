@@ -28,74 +28,94 @@ function parseCSV(text) {
 
 // --- CLOUD FUNCTION: createUsersFromCSV ---
 exports.createUsersFromCSV = functions.https.onCall(async (data, context) => {
-    // Basic auth check: in a real app, you'd check if the caller is an admin
-    // For now, we trust the security rule on the admin page itself.
-
-    const csvData = data.csv;
-    if (!csvData) {
-        throw new functions.https.HttpsError('invalid-argument', 'No se proporcionaron datos CSV.');
-    }
-
-    let parsedData;
     try {
-        parsedData = parseCSV(csvData);
-    } catch (error) {
-        throw error; // Re-throw parsing errors
-    }
+        // Basic auth check: in a real app, you'd check if the caller is an admin
+        // For now, we trust the security rule on the admin page itself.
 
-    const results = {
-        successCount: 0,
-        errorCount: 0,
-        errors: [],
-    };
-
-    for (const record of parsedData) {
-        const { escuela_id, dni } = record;
-
-        if (!escuela_id || !dni) {
-            results.errorCount++;
-            results.errors.push(`Registro omitido: falta escuela_id o dni.`);
-            continue;
+        const csvData = data.csv;
+        if (typeof csvData !== 'string' || csvData.length === 0) {
+            throw new functions.https.HttpsError('invalid-argument', 'El archivo CSV está vacío o el formato de los datos no es correcto.');
         }
 
-        const email = `escuela${escuela_id}@fiscal.app`;
-        const password = dni;
-
+        let parsedData;
         try {
-            // 1. Create user in Firebase Auth
-            const userRecord = await admin.auth().createUser({
-                email: email,
-                password: password,
-                displayName: `Fiscal Escuela ${escuela_id}`,
-            });
-
-            // 2. Create corresponding document in Firestore
-            const fiscalDocRef = admin.firestore().collection('fiscales').doc(userRecord.uid);
-            await fiscalDocRef.set({
-                escuela_id: escuela_id,
-                dni: dni,
-            });
-
-            results.successCount++;
-
+            parsedData = parseCSV(csvData);
         } catch (error) {
-            results.errorCount++;
-            let errorMessage = `Error creando usuario para escuela ${escuela_id}: ${error.message}`;
-            // If user already exists, try to update Firestore anyway
-            if (error.code === 'auth/email-already-exists') {
-                 errorMessage = `El usuario ${email} ya existe.`;
-                 // Optional: you could try to find the user and update their Firestore doc
-            }
-            results.errors.push(errorMessage);
+            throw error; // Re-throw parsing errors to be caught by the main try-catch
         }
-    }
 
-    if (results.errorCount > 0) {
-        console.error("Errores durante la carga:", results.errors);
-    }
+        const results = {
+            successCount: 0,
+            errorCount: 0,
+            details: [], // Match client expectation for 'details'
+        };
 
-    return {
-        message: `Proceso completado. ${results.successCount} usuarios creados, ${results.errorCount} errores.`,
-        details: results.errors,
-    };
+        for (const record of parsedData) {
+            const { escuela_id, dni } = record;
+
+            if (!escuela_id || !dni) {
+                results.errorCount++;
+                results.details.push(`Registro omitido: falta escuela_id o dni.`);
+                continue;
+            }
+
+            const email = `escuela${escuela_id}@fiscal.app`;
+            const password = dni;
+
+            try {
+                // 1. Create user in Firebase Auth
+                const userRecord = await admin.auth().createUser({
+                    email: email,
+                    password: password,
+                    displayName: `Fiscal Escuela ${escuela_id}`,
+                });
+
+                // 2. Create corresponding document in Firestore
+                const fiscalDocRef = admin.firestore().collection('fiscales').doc(userRecord.uid);
+                await fiscalDocRef.set({
+                    escuela_id: escuela_id,
+                    dni: dni,
+                });
+
+                results.successCount++;
+
+            } catch (error) {
+                results.errorCount++;
+                let errorMessage = `Error creando usuario para escuela ${escuela_id}: ${error.message}`;
+                if (error.code === 'auth/email-already-exists') {
+                     errorMessage = `El usuario ${email} ya existe.`;
+                }
+                results.details.push(errorMessage);
+                // Log individual user creation errors
+                functions.logger.warn(`Failed to create user for escuela_id ${escuela_id}`, { error: error.message });
+            }
+        }
+
+        if (results.errorCount > 0) {
+            functions.logger.warn("Proceso de carga de CSV completado con errores.", {
+                errors: results.details,
+                totalErrors: results.errorCount,
+                totalSuccess: results.successCount,
+            });
+        }
+
+        return {
+            message: `Proceso completado. ${results.successCount} usuarios creados, ${results.errorCount} errores.`,
+            details: results.details,
+            errorCount: results.errorCount,
+        };
+    } catch (error) {
+        // Main catch block for unexpected errors.
+        functions.logger.error("Error no manejado en createUsersFromCSV", {
+            errorMessage: error.message,
+            errorCode: error.code,
+            errorStack: error.stack,
+        });
+
+        // Re-throw a generic error to the client to avoid leaking implementation details.
+        if (error instanceof functions.https.HttpsError) {
+            throw error; // If it's already a formatted HttpsError, rethrow it.
+        }
+        throw new functions.https.HttpsError('internal', 'Ocurrió un error inesperado al procesar su solicitud.');
+    }
 });
