@@ -31,20 +31,30 @@
             </form>
         </div>
     </div>
-    <script>
+    <script type="module">
+        import { app, auth } from '/firebase-config.js';
+        import { signInWithEmailAndPassword, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
+
         const loginForm = document.getElementById('admin-login-form');
         const loginError = document.getElementById('login-error');
 
-        loginForm.addEventListener('submit', (e) => {
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
 
-            // Credenciales hardcodeadas según lo solicitado
             if (username === 'admin' && password === 'pana2025!') {
-                // Guardar un token simple en sessionStorage para indicar que el admin está logueado
-                sessionStorage.setItem('admin-auth-token', 'logged_in');
-                window.location.href = 'admin.html';
+                try {
+                    // Iniciar sesión en Firebase Auth para tener permisos en Firestore/Functions
+                    const email = `${username}@fiscal.app`;
+                    await setPersistence(auth, browserSessionPersistence);
+                    await signInWithEmailAndPassword(auth, email, password);
+                    sessionStorage.setItem('admin-auth-token', 'logged_in');
+                    window.location.href = 'admin.html';
+                } catch (err) {
+                    loginError.textContent = 'Error al iniciar sesión. Verifique credenciales.';
+                    loginError.classList.remove('hidden');
+                }
             } else {
                 loginError.textContent = 'Usuario o contraseña incorrectos.';
                 loginError.classList.remove('hidden');

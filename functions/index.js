@@ -4,20 +4,24 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 
 // --- CSV PARSER ---
-// A simple parser, not robust for complex CSVs (e.g., with commas in values)
+// Detects whether the CSV uses commas or semicolons as delimiters.
+// Still a simple parser, not robust for complex CSVs (e.g., with embedded commas).
 function parseCSV(text) {
     const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
     if (lines.length < 2) {
         throw new functions.https.HttpsError('invalid-argument', 'El CSV debe tener un encabezado y al menos una fila de datos.');
     }
-    const header = lines[0].split(',').map(h => h.trim());
+
+    // Determine delimiter: default comma, but switch to semicolon if no commas are present
+    const delimiter = lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',';
+    const header = lines[0].split(delimiter).map(h => h.trim());
     const requiredHeaders = ['escuela_id', 'dni'];
     if (!requiredHeaders.every(h => header.includes(h))) {
         throw new functions.https.HttpsError('invalid-argument', `El encabezado del CSV debe contener las columnas: ${requiredHeaders.join(', ')}.`);
     }
 
     return lines.slice(1).map(line => {
-        const values = line.split(',');
+        const values = line.split(delimiter);
         return header.reduce((obj, h, i) => {
             obj[h] = values[i] ? values[i].trim().replace(/"/g, '') : '';
             return obj;
@@ -32,9 +36,11 @@ exports.createUsersFromCSV = functions.https.onCall(async (data, context) => {
         // Basic auth check: in a real app, you'd check if the caller is an admin
         // For now, we trust the security rule on the admin page itself.
 
-        const csvData = data.csv;
-        if (typeof csvData !== 'string' || csvData.length === 0) {
-            throw new functions.https.HttpsError('invalid-argument', 'El archivo CSV está vacío o el formato de los datos no es correcto.');
+        // Admit both {csv: "..."} or direct string payloads and remove UTF-8 BOM if present
+        const rawCsv = (typeof data === 'string' ? data : data?.csv) || '';
+        const csvData = rawCsv.replace(/^\uFEFF/, '');
+        if (csvData.trim().length === 0) {
+            throw new functions.https.HttpsError('invalid-argument', 'No se proporcionaron datos CSV.');
         }
 
         let parsedData;
