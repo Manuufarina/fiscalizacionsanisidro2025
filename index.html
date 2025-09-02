@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fiscalización de Mesa</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="./styles.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; }
@@ -136,11 +136,23 @@
                 // 1. Obtener datos del fiscal
                 const fiscalDocRef = doc(db, 'fiscales', fiscalUid);
                 const fiscalDoc = await getDoc(fiscalDocRef);
-                if (!fiscalDoc.exists()) throw new Error("Datos de fiscal no encontrados.");
-                currentFiscal = { uid: fiscalUid, ...fiscalDoc.data() };
-                
+                let escuelaId;
+
+                if (fiscalDoc.exists()) {
+                    currentFiscal = { uid: fiscalUid, ...fiscalDoc.data() };
+                    escuelaId = currentFiscal.escuela_id;
+                } else {
+                    // Extraer el ID de escuela desde el email si falta el documento del fiscal
+                    const match = auth.currentUser?.email?.match(/escuela(\d+)@/);
+                    if (!match) throw new Error("Datos de fiscal no encontrados.");
+                    escuelaId = match[1];
+                    currentFiscal = { uid: fiscalUid, escuela_id: escuelaId };
+                    // Persistir el documento del fiscal para futuros ingresos
+                    await setDoc(fiscalDocRef, { escuela_id: escuelaId });
+                }
+
                 // 2. Obtener datos de la escuela asignada
-                const escuelaDocRef = doc(db, 'escuelas', currentFiscal.escuela_id);
+                const escuelaDocRef = doc(db, 'escuelas', escuelaId);
                 const escuelaDoc = await getDoc(escuelaDocRef);
                 if (!escuelaDoc.exists()) throw new Error("Datos de escuela no encontrados.");
                 const escuelaData = { id: escuelaDoc.id, ...escuelaDoc.data() };
@@ -154,7 +166,11 @@
                 renderMesas(escuelaData.mesas);
             } catch (error) {
                 console.error("Error al cargar datos:", error);
-                alert("Error crítico al cargar los datos. Intente recargar la página.");
+                if (error.code === 'permission-denied') {
+                    alert("No tiene permisos para acceder a estos datos. Contacte al administrador.");
+                } else {
+                    alert("Error crítico al cargar los datos. Intente recargar la página.");
+                }
                 signOut(auth);
             }
         }
