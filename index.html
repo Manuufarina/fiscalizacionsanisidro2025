@@ -106,7 +106,9 @@
         
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const escuelaId = document.getElementById('escuela-id').value.trim();
+            // Sanitize input to only keep numbers, preventing invalid email format
+            const rawEscuelaId = document.getElementById('escuela-id').value;
+            const escuelaId = rawEscuelaId.replace(/\D/g, '');
             const dni = document.getElementById('dni').value.trim();
             
             loginButton.textContent = 'Ingresando...';
@@ -167,7 +169,13 @@
                 renderMesas(escuelaData.mesas);
             } catch (error) {
                 console.error("Error al cargar datos:", error);
-                alert("Error crítico al cargar los datos. Intente recargar la página.");
+                let userMessage = "Error crítico al cargar los datos. Intente recargar la página.";
+                if (error.message.includes("Datos de escuela no encontrados")) {
+                    userMessage = `La escuela asignada no fue encontrada en la base de datos. Por favor, contacte a un administrador.`;
+                } else if (error.message.includes("Datos de fiscal no encontrados")) {
+                    userMessage = "No se pudo verificar su identidad como fiscal. Por favor, contacte a un administrador.";
+                }
+                alert(userMessage);
                 signOut(auth);
             }
         }
