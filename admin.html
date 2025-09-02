@@ -68,7 +68,7 @@
                 <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
                     <h3 class="font-semibold text-lg mb-2">1. Cargar Listas</h3>
                     <p class="text-xs text-gray-500 mb-2">CSV con columnas: `id`, `nombre_lista`.</p>
-                     <a href='data:text/csv;charset=utf-8,id,nombre_lista%0Alista_01,CONSTRUYENDO PORVENIR%0Alista_02,ACCION VECINAL' download="listas_ejemplo_consolidadas.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                     <a href='data:text/csv;charset=utf-8,id;nombre_lista%0Alista_01;CONSTRUYENDO PORVENIR%0Alista_02;ACCION VECINAL' download="listas_ejemplo_consolidadas.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
                     <form class="space-y-3 mt-auto" data-upload-type="listas">
                         <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
                         <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Listas</button>
@@ -78,7 +78,7 @@
                 <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
                     <h3 class="font-semibold text-lg mb-2">2. Cargar Escuelas</h3>
                     <p class="text-xs text-gray-500 mb-2">CSV con: `id`, `nombre`, `lat`, `lng`, `mesas` (separadas por coma: "1001,1002").</p>
-                    <a href='data:text/csv;charset=utf-8,id,nombre,lat,lng,mesas%0A1,Escuela San Martín,-34.468,-58.515,"1001,1002"%0A15,"E.P. N°1 Sarmiento",-34.47,-58.52,"7001,7002"' download="escuelas_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                    <a href='data:text/csv;charset=utf-8,id;nombre;lat;lng;mesas%0A1;Escuela San Martín;-34.468;-58.515;"1001,1002"%0A15;"E.P. N°1 Sarmiento";-34.47;-58.52;"7001,7002"' download="escuelas_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
                     <form class="space-y-3 mt-auto" data-upload-type="escuelas">
                         <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
                         <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Escuelas</button>
@@ -88,7 +88,7 @@
                 <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
                     <h3 class="font-semibold text-lg mb-2">3. Cargar Fiscales</h3>
                     <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `escuela{id}@fiscal.app` con el DNI como contraseña.</p>
-                    <a href='data:text/csv;charset=utf-8,escuela_id,dni%0A15,12345678%0A22,87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                    <a href='data:text/csv;charset=utf-8,escuela_id;dni%0A15;12345678%0A22;87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
                     <form class="space-y-3 mt-auto" data-upload-type="fiscales">
                         <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
                         <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Fiscales</button>
