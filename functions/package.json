@@ -14,8 +14,7 @@
   "main": "index.js",
   "dependencies": {
     "firebase-admin": "^11.11.1",
-    "firebase-functions": "^4.4.1",
-    "cors": "^2.8.5"
+    "firebase-functions": "^4.4.1"
   },
   "devDependencies": {
     "firebase-functions-test": "^3.1.0"
