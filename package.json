@@ -3,5 +3,11 @@
   "version": "1.0.0",
   "description": "WebApp para fiscalización de elecciones municipales de San Isidro.",
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "scripts": {
+    "build:css": "tailwindcss -i input.css -o tailwind.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.4"
+  }
 }
