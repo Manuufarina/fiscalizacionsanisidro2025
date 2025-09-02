@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Fiscalización - San Isidro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f0f2f5; }
+        #map { height: 500px; border-radius: 0.75rem; }
+        .chart-toggle-btn.active { background-color: #4f46e5; color: white; }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <header class="bg-white shadow-md">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-gray-900">Dashboard de Fiscalización</h1>
+            <div>
+                <p class="font-semibold">Elecciones 2025</p>
+                <p class="text-sm text-gray-500">San Isidro</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4 md:p-6 space-y-6">
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div class="bg-white p-6 rounded-xl shadow-md"><p class="text-sm text-gray-500">Mesas Cargadas</p><p class="text-2xl font-bold" id="kpi-mesas-cargadas">--/--</p></div>
+            <div class="bg-white p-6 rounded-xl shadow-md"><p class="text-sm text-gray-500">% Participación</p><p class="text-2xl font-bold" id="kpi-participacion">--.--%</p></div>
+            <div class="bg-white p-6 rounded-xl shadow-md"><p class="text-sm text-gray-500">Escuelas Cerradas</p><p class="text-2xl font-bold" id="kpi-escuelas-cerradas">--/--</p></div>
+            <div class="bg-white p-6 rounded-xl shadow-md"><p class="text-sm text-gray-500" id="kpi-total-votos-label">Total Votos (Concejales)</p><p class="text-2xl font-bold" id="kpi-total-votos">--</p></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-bold">Resultados</h2>
+                    <div class="flex border border-gray-300 rounded-lg p-0.5 bg-gray-100">
+                        <button id="btn-concejales" class="chart-toggle-btn active px-3 py-1 text-sm rounded-md">Concejales</button>
+                        <button id="btn-senadores" class="chart-toggle-btn px-3 py-1 text-sm rounded-md">Senadores</button>
+                    </div>
+                </div>
+                <div class="w-full" style="height: 350px;"><canvas id="resultsChart"></canvas></div>
+            </div>
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-lg font-bold mb-4">Mapa de Escuelas</h2>
+                <div id="map"></div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow-md">
+            <h2 class="text-xl font-bold mb-4">Configuración y Carga de Datos</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Cargar Fiscales -->
+                <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
+                    <h3 class="font-semibold text-lg mb-2">1. Cargar Fiscales</h3>
+                    <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `escuela{id}@fiscal.app` con el DNI como contraseña.</p>
+                    <a href='data:text/csv;charset=utf-8,escuela_id,dni%0A15,12345678%0A22,87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                    <form class="space-y-3 mt-auto" data-upload-type="fiscales">
+                        <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
+                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Fiscales</button>
+                    </form>
+                </div>
+                <!-- Cargar Escuelas -->
+                <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
+                    <h3 class="font-semibold text-lg mb-2">2. Cargar Escuelas</h3>
+                    <p class="text-xs text-gray-500 mb-2">CSV con: `id`, `nombre`, `lat`, `lng`, `mesas` (separadas por coma: "7001,7002").</p>
+                    <a href='data:text/csv;charset=utf-8,id,nombre,lat,lng,mesas%0A1,Escuela San Martín,-34.468,-58.515,"1001,1002"%0A15,"E.P. N°1 Sarmiento",-34.47,-58.52,"7001,7002"' download="escuelas_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                    <form class="space-y-3 mt-auto" data-upload-type="escuelas">
+                        <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
+                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Escuelas</button>
+                    </form>
+                </div>
+                <!-- Cargar Listas -->
+                <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
+                    <h3 class="font-semibold text-lg mb-2">3. Cargar Listas</h3>
+                    <p class="text-xs text-gray-500 mb-2">CSV con columnas: `id`, `nombre_lista`.</p>
+                     <a href='data:text/csv;charset=utf-8,id,nombre_lista%0Alista_01,CONSTRUYENDO PORVENIR%0Alista_02,ACCION VECINAL' download="listas_ejemplo_consolidadas.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                    <form class="space-y-3 mt-auto" data-upload-type="listas">
+                        <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
+                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Listas</button>
+                    </form>
+                </div>
+            </div>
+             <p id="upload-feedback" class="text-center text-green-600 font-medium mt-4"></p>
+        </div>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="module">
+        import { app, db } from '/firebase-config.js';
+        import { collection, onSnapshot, collectionGroup, query, setDoc, doc, writeBatch } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+
+        // --- GLOBAL STATE ---
+        let globalData = { listas: {}, escuelas: {}, mesas: {} };
+        let resultsChartInstance = null;
+        let map = null;
+        let mapMarkers = {};
+        let currentChartCategory = 'concejales';
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            setupChartToggle();
+            setupUploadForms();
+            
+            // Listen for real-time updates
+            listenToListas();
+            listenToEscuelas();
+            listenToMesas();
+        });
+
+        // --- REAL-TIME LISTENERS ---
+        function listenToListas() {
+            onSnapshot(collection(db, 'listas'), snapshot => {
+                snapshot.docs.forEach(doc => { globalData.listas[doc.id] = doc.data(); });
+                updateDashboard();
+            });
+        }
+
+        function listenToEscuelas() {
+            onSnapshot(collection(db, 'escuelas'), snapshot => {
+                snapshot.docChanges().forEach(change => {
+                    const esc = { id: change.doc.id, ...change.doc.data() };
+                    if (change.type === "added" || change.type === "modified") {
+                        globalData.escuelas[esc.id] = esc;
+                    }
+                    if (change.type === "removed") {
+                        delete globalData.escuelas[esc.id];
+                    }
+                });
+                updateDashboard();
+            });
+        }
+
+        function listenToMesas() {
+            const mesasQuery = query(collectionGroup(db, 'mesas'));
+            onSnapshot(mesasQuery, snapshot => {
+                 snapshot.docChanges().forEach(change => {
+                    const mesa = { id: change.doc.id, ...change.doc.data() };
+                    const escuelaId = change.doc.ref.parent.parent.id;
+                    if (change.type === "added" || change.type === "modified") {
+                        globalData.mesas[mesa.id] = { ...mesa, escuelaId };
+                    }
+                    if (change.type === "removed") {
+                        delete globalData.mesas[mesa.id];
+                    }
+                });
+                updateDashboard();
+            });
+        }
+        
+        // --- DASHBOARD UPDATES ---
+        function updateDashboard() {
+            if (Object.keys(globalData.listas).length === 0 || Object.keys(globalData.escuelas).length === 0) return;
+            updateKPIs();
+            updateChart();
+            updateMap();
+        }
+
+        function updateKPIs() {
+            const escuelasArray = Object.values(globalData.escuelas);
+            const mesasArray = Object.values(globalData.mesas);
+            
+            const totalMesasSistema = escuelasArray.reduce((acc, esc) => acc + (esc.mesas?.length || 0), 0);
+            const mesasCargadas = mesasArray.length;
+            document.getElementById('kpi-mesas-cargadas').textContent = `${mesasCargadas}/${totalMesasSistema}`;
+
+            let totalHabilitados = 0;
+            let totalVotantes = 0;
+            mesasArray.forEach(m => {
+                totalHabilitados += m.habilitados || 0;
+                totalVotantes += m.votantes || 0;
+            });
+            const participacion = totalHabilitados > 0 ? (totalVotantes / totalHabilitados * 100).toFixed(2) : 0;
+            document.getElementById('kpi-participacion').textContent = `${participacion}%`;
+            
+            let escuelasCerradasCount = 0;
+            escuelasArray.forEach(esc => {
+                const mesasDeLaEscuela = mesasArray.filter(m => m.escuelaId === esc.id);
+                const mesasCerradas = mesasDeLaEscuela.filter(m => m.estado === 'cerrada');
+                if (esc.mesas?.length > 0 && mesasCerradas.length === esc.mesas.length) {
+                    escuelasCerradasCount++;
+                }
+            });
+            document.getElementById('kpi-escuelas-cerradas').textContent = `${escuelasCerradasCount}/${escuelasArray.length}`;
+
+            const totalVotos = mesasArray.reduce((sum, mesa) => {
+                return sum + Object.values(mesa.votos || {}).reduce((subSum, lista) => subSum + (lista[currentChartCategory] || 0), 0);
+            }, 0);
+            document.getElementById('kpi-total-votos-label').textContent = `Total Votos (${currentChartCategory.charAt(0).toUpperCase() + currentChartCategory.slice(1)})`;
+            document.getElementById('kpi-total-votos').textContent = totalVotos.toLocaleString('es-AR');
+        }
+
+        function updateChart() {
+            const ctx = document.getElementById('resultsChart').getContext('2d');
+            if (resultsChartInstance) resultsChartInstance.destroy();
+            
+            const votosPorLista = {};
+            Object.keys(globalData.listas).forEach(id => { votosPorLista[id] = 0 });
+
+            Object.values(globalData.mesas).forEach(mesa => {
+                for (const listaId in (mesa.votos || {})) {
+                    if (votosPorLista.hasOwnProperty(listaId)) {
+                        votosPorLista[listaId] += mesa.votos[listaId][currentChartCategory] || 0;
+                    }
+                }
+            });
+            
+            const listasArray = Object.entries(globalData.listas).map(([id, data]) => ({id, ...data}));
+            const chartData = listasArray.map(l => votosPorLista[l.id]).filter(v => v > 0);
+            const chartLabels = listasArray.filter(l => votosPorLista[l.id] > 0).map(l => l.nombre_lista);
+            const chartColors = Array(chartLabels.length).fill(0).map((_, i) => `hsl(${i * 360 / chartLabels.length}, 70%, 50%)`);
+
+            resultsChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: { labels: chartLabels, datasets: [{ data: chartData, backgroundColor: chartColors, borderColor: '#fff' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function setupChartToggle() {
+            const btnConcejales = document.getElementById('btn-concejales');
+            const btnSenadores = document.getElementById('btn-senadores');
+            btnConcejales.addEventListener('click', () => {
+                currentChartCategory = 'concejales';
+                btnConcejales.classList.add('active');
+                btnSenadores.classList.remove('active');
+                updateDashboard();
+            });
+            btnSenadores.addEventListener('click', () => {
+                currentChartCategory = 'senadores';
+                btnSenadores.classList.add('active');
+                btnConcejales.classList.remove('active');
+                updateDashboard();
+            });
+        }
+        
+        // --- MAP ---
+        function initMap() {
+            map = L.map('map').setView([-34.47, -58.52], 14);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+        }
+
+        function updateMap() {
+            const greenIcon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+            const redIcon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
+            const mesasArray = Object.values(globalData.mesas);
+
+            Object.values(globalData.escuelas).forEach(escuela => {
+                const mesasDeLaEscuela = mesasArray.filter(m => m.escuelaId === escuela.id);
+                const mesasCerradas = mesasDeLaEscuela.filter(m => m.estado === 'cerrada');
+                const isCerrada = escuela.mesas?.length > 0 && mesasCerradas.length === escuela.mesas.length;
+                
+                const popupContent = `<b>${escuela.nombre}</b><br>Mesas cargadas: ${mesasDeLaEscuela.length}/${escuela.mesas?.length || 0}`;
+
+                if (mapMarkers[escuela.id]) {
+                    mapMarkers[escuela.id].setIcon(isCerrada ? redIcon : greenIcon).setPopupContent(popupContent);
+                } else {
+                    mapMarkers[escuela.id] = L.marker([escuela.lat, escuela.lng], { icon: isCerrada ? redIcon : greenIcon }).addTo(map).bindPopup(popupContent);
+                }
+            });
+        }
+        
+        // --- CSV UPLOAD ---
+        function setupUploadForms() {
+            document.querySelectorAll('form[data-upload-type]').forEach(form => {
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const type = form.dataset.uploadType;
+                    const file = e.target.querySelector('input[type="file"]').files[0];
+                    if (!file) { alert("Seleccione un archivo."); return; }
+                    
+                    const button = e.target.querySelector('button');
+                    button.textContent = "Cargando...";
+                    button.disabled = true;
+
+                    try {
+                        const text = await file.text();
+                        const data = parseCSV(text);
+                        await uploadData(type, data);
+                        showUploadFeedback(`¡${data.length} registros de ${type} cargados!`);
+                    } catch (err) {
+                        console.error("Error en carga:", err);
+                        showUploadFeedback(`Error: ${err.message}`, true);
+                    } finally {
+                        button.textContent = `Cargar ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+                        button.disabled = false;
+                        form.reset();
+                    }
+                });
+            });
+        }
+
+        function parseCSV(text) {
+            const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+            const header = lines[0].split(',').map(h => h.trim());
+            return lines.slice(1).map(line => {
+                const values = line.split(',');
+                return header.reduce((obj, h, i) => {
+                    obj[h] = values[i].trim().replace(/"/g, '');
+                    return obj;
+                }, {});
+            });
+        }
+        
+        async function uploadData(type, data) {
+            const batch = writeBatch(db);
+            switch(type) {
+                case 'listas':
+                    data.forEach(item => {
+                        const docRef = doc(db, "listas", item.id);
+                        batch.set(docRef, { nombre_lista: item.nombre_lista });
+                    });
+                    break;
+                case 'escuelas':
+                     data.forEach(item => {
+                        const docRef = doc(db, "escuelas", item.id);
+                        batch.set(docRef, {
+                            nombre: item.nombre,
+                            lat: parseFloat(item.lat),
+                            lng: parseFloat(item.lng),
+                            mesas: item.mesas.split(';').map(m => m.trim())
+                        });
+                    });
+                    break;
+                case 'fiscales':
+                    // Nota: Esto NO crea usuarios en Firebase Auth.
+                    // Debes crear los usuarios en la consola de Firebase primero.
+                    // Esto solo crea el documento de mapeo en Firestore.
+                    alert("Importante: La carga de Fiscales por CSV solo crea el registro en la base de datos. Usted debe crear manualmente cada usuario (email/contraseña) en la sección 'Authentication' de la consola de Firebase.");
+                    data.forEach(item => {
+                        // El UID del usuario se debe obtener de Firebase Auth y colocarlo aquí
+                        // Por ahora, usamos un placeholder. Esto requiere un paso manual o un script de Node.js
+                        const uidPlaceholder = `uid_for_escuela_${item.escuela_id}`;
+                        const docRef = doc(db, "fiscales", uidPlaceholder);
+                        batch.set(docRef, { escuela_id: item.escuela_id, dni: item.dni });
+                    });
+                    break;
+            }
+            await batch.commit();
+        }
+
+        function showUploadFeedback(message, isError = false) {
+            const feedbackEl = document.getElementById('upload-feedback');
+            feedbackEl.textContent = message;
+            feedbackEl.className = `text-center font-medium mt-4 ${isError ? 'text-red-600' : 'text-green-600'}`;
+            setTimeout(() => { feedbackEl.textContent = ''; }, 5000);
+        }
+
+    </script>
+</body>
+</html>
+

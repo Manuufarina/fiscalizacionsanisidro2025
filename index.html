@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fiscalización de Mesa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4f46e5;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <!-- Pantalla de Login -->
+    <div id="login-screen" class="min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-md bg-white p-8 rounded-2xl shadow-lg">
+            <h1 class="text-2xl font-bold text-center text-gray-800 mb-2">Fiscalización Electoral</h1>
+            <p class="text-center text-gray-500 mb-6">San Isidro 2025</p>
+            <form id="login-form">
+                <div class="mb-4">
+                    <label for="escuela-id" class="block text-sm font-medium text-gray-700 mb-1">N° de Escuela</label>
+                    <input type="text" id="escuela-id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" placeholder="Ej: 15" required>
+                </div>
+                <div class="mb-6">
+                    <label for="dni" class="block text-sm font-medium text-gray-700 mb-1">DNI (Contraseña)</label>
+                    <input type="password" id="dni" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" placeholder="Su DNI sin puntos" required>
+                </div>
+                <button type="submit" id="login-button" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 transition-all">
+                    Ingresar
+                </button>
+                <p id="login-error" class="text-red-500 text-sm text-center mt-4 hidden"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Pantalla Principal de Fiscalización (oculta por defecto) -->
+    <div id="main-app" class="hidden">
+        <header class="bg-white shadow-sm sticky top-0 z-10">
+            <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+                <div>
+                    <h1 id="escuela-nombre" class="text-lg font-bold text-gray-900"></h1>
+                    <p class="text-sm text-gray-500">N° <span id="escuela-numero"></span></p>
+                </div>
+                <button id="logout-button" class="text-sm font-medium text-red-600 hover:text-red-800">Salir</button>
+            </div>
+        </header>
+        <main id="mesas-container" class="container mx-auto p-4 space-y-4 pb-20">
+            <!-- Las mesas se cargarán aquí dinámicamente -->
+        </main>
+        <div id="loading-container" class="flex justify-center items-center h-64">
+            <div class="loader"></div>
+        </div>
+    </div>
+    
+    <!-- Modal de feedback -->
+    <div id="feedback-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-lg p-6 text-center shadow-xl">
+            <p id="feedback-message" class="text-lg"></p>
+        </div>
+    </div>
+
+
+    <script type="module">
+        import { app, db, auth, storage } from '/firebase-config.js';
+        import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
+        import { doc, getDoc, getDocs, collection, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+        import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js";
+
+        // Elementos del DOM
+        const loginScreen = document.getElementById('login-screen');
+        const mainApp = document.getElementById('main-app');
+        const loginForm = document.getElementById('login-form');
+        const loginButton = document.getElementById('login-button');
+        const loginError = document.getElementById('login-error');
+        const logoutButton = document.getElementById('logout-button');
+        const mesasContainer = document.getElementById('mesas-container');
+        const loadingContainer = document.getElementById('loading-container');
+        
+        let listasOficializadas = [];
+        let currentFiscal = null;
+
+        // --- MANEJO DE AUTENTICACIÓN ---
+        onAuthStateChanged(auth, user => {
+            if (user) {
+                // Usuario logueado
+                loadFiscalData(user.uid);
+            } else {
+                // Usuario no logueado
+                showLoginScreen();
+            }
+        });
+        
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const escuelaId = document.getElementById('escuela-id').value.trim();
+            const dni = document.getElementById('dni').value.trim();
+            
+            loginButton.textContent = 'Ingresando...';
+            loginButton.disabled = true;
+            loginError.classList.add('hidden');
+
+            try {
+                // El email se construye como `escuela{id}@fiscal.app`
+                const email = `escuela${escuelaId}@fiscal.app`;
+                await signInWithEmailAndPassword(auth, email, dni);
+                // onAuthStateChanged se encargará del resto
+            } catch (error) {
+                console.error("Error de login:", error);
+                loginError.textContent = 'Escuela o DNI incorrecto.';
+                loginError.classList.remove('hidden');
+                loginButton.textContent = 'Ingresar';
+                loginButton.disabled = false;
+            }
+        });
+        
+        logoutButton.addEventListener('click', () => {
+            signOut(auth);
+        });
+        
+        // --- CARGA DE DATOS ---
+        async function loadFiscalData(fiscalUid) {
+            try {
+                // 1. Obtener datos del fiscal
+                const fiscalDocRef = doc(db, 'fiscales', fiscalUid);
+                const fiscalDoc = await getDoc(fiscalDocRef);
+                if (!fiscalDoc.exists()) throw new Error("Datos de fiscal no encontrados.");
+                currentFiscal = { uid: fiscalUid, ...fiscalDoc.data() };
+                
+                // 2. Obtener datos de la escuela asignada
+                const escuelaDocRef = doc(db, 'escuelas', currentFiscal.escuela_id);
+                const escuelaDoc = await getDoc(escuelaDocRef);
+                if (!escuelaDoc.exists()) throw new Error("Datos de escuela no encontrados.");
+                const escuelaData = { id: escuelaDoc.id, ...escuelaDoc.data() };
+
+                // 3. Cargar listas de partidos
+                const listasSnapshot = await getDocs(collection(db, 'listas'));
+                listasOficializadas = listasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                // 4. Mostrar la app y renderizar mesas
+                showMainApp(escuelaData);
+                renderMesas(escuelaData.mesas);
+            } catch (error) {
+                console.error("Error al cargar datos:", error);
+                alert("Error crítico al cargar los datos. Intente recargar la página.");
+                signOut(auth);
+            }
+        }
+
+        async function renderMesas(mesasIds) {
+            mesasContainer.innerHTML = '';
+            for (const mesaId of mesasIds) {
+                const mesaDocRef = doc(db, `escuelas/${currentFiscal.escuela_id}/mesas`, mesaId);
+                const mesaDoc = await getDoc(mesaDocRef);
+                const mesaData = mesaDoc.exists() ? mesaDoc.data() : {};
+                mesasContainer.appendChild(createMesaElement(mesaId, mesaData));
+            }
+            loadingContainer.classList.add('hidden');
+        }
+
+        // --- RENDERIZADO DEL DOM ---
+        function showLoginScreen() {
+            loginScreen.classList.remove('hidden');
+            mainApp.classList.add('hidden');
+            loginButton.textContent = 'Ingresar';
+            loginButton.disabled = false;
+            loginForm.reset();
+        }
+
+        function showMainApp(escuela) {
+            document.getElementById('escuela-nombre').textContent = escuela.nombre;
+            document.getElementById('escuela-numero').textContent = escuela.id;
+            loginScreen.classList.add('hidden');
+            mainApp.classList.remove('hidden');
+        }
+
+        function createMesaElement(mesaId, data) {
+            const isCerrada = data.estado === 'cerrada';
+            const detailsOpen = !isCerrada ? 'open' : '';
+            
+            const mesaWrapper = document.createElement('div');
+            mesaWrapper.className = 'bg-white rounded-xl shadow-md';
+
+            let listasHtml = listasOficializadas.map(lista => `
+                <div class="grid grid-cols-3 gap-2 items-center">
+                    <label class="text-sm text-gray-600 truncate pr-2">${lista.nombre_lista}</label>
+                    <input type="number" name="senadores_${lista.id}" value="${data.votos?.[lista.id]?.senadores || ''}" ${isCerrada ? 'disabled' : ''} class="w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1">
+                    <input type="number" name="concejales_${lista.id}" value="${data.votos?.[lista.id]?.concejales || ''}" ${isCerrada ? 'disabled' : ''} class="w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1">
+                </div>
+            `).join('');
+
+            mesaWrapper.innerHTML = `
+                <details class="p-4" ${detailsOpen}>
+                    <summary class="flex justify-between items-center cursor-pointer">
+                        <h2 class="text-xl font-bold">Mesa N° ${mesaId}</h2>
+                        <span class="text-sm font-semibold py-1 px-3 rounded-full ${isCerrada ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}">
+                            ${isCerrada ? 'Cerrada' : 'Abierta'}
+                        </span>
+                    </summary>
+                    <form class="mt-6 space-y-4" data-mesa-id="${mesaId}">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-500">Votantes Habilitados</label>
+                                <input type="number" name="habilitados" value="${data.habilitados || ''}" ${isCerrada ? 'disabled' : ''} required class="mt-1 w-full p-2 border border-gray-300 rounded-md">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-500">Votaron</label>
+                                <input type="number" name="votantes" value="${data.votantes || ''}" ${isCerrada ? 'disabled' : ''} required class="mt-1 w-full p-2 border border-gray-300 rounded-md">
+                            </div>
+                        </div>
+                        <div class="space-y-3 pt-2">
+                             <div class="grid grid-cols-3 gap-2 font-semibold text-center text-gray-700">
+                                <span></span>
+                                <span>Senadores</span>
+                                <span>Concejales</span>
+                            </div>
+                            ${listasHtml}
+                        </div>
+                        <div class="pt-4">
+                            <label class="block text-sm font-medium text-gray-500">Certificado de Escrutinio (foto)</label>
+                            ${data.certificadoUrl ? `<a href="${data.certificadoUrl}" target="_blank" class="text-indigo-600 hover:underline">Ver foto cargada</a>` : ''}
+                            <input type="file" name="certificado" accept="image/*" class="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" ${isCerrada ? 'disabled' : ''}>
+                        </div>
+                         <div class="flex flex-col md:flex-row gap-3 pt-4">
+                             <button type="submit" name="action" value="guardar" class="w-full bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-700 transition-all ${isCerrada ? 'hidden' : ''}">
+                                Guardar Borrador
+                            </button>
+                            <button type="submit" name="action" value="cerrar" class="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-all ${isCerrada ? 'hidden' : ''}">
+                                Cerrar Mesa Definitivamente
+                            </button>
+                        </div>
+                    </form>
+                </details>
+            `;
+            
+            // --- MANEJO DE FORMULARIO ---
+            const form = mesaWrapper.querySelector('form');
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const action = e.submitter.value;
+                if (action === 'cerrar') {
+                    if (!confirm('¿Está seguro que desea cerrar la mesa? Esta acción es definitiva y no podrá editar los datos.')) {
+                        return;
+                    }
+                }
+                
+                const submitButton = e.submitter;
+                submitButton.textContent = 'Procesando...';
+                submitButton.disabled = true;
+
+                try {
+                    const formData = new FormData(form);
+                    const mesaId = form.dataset.mesaId;
+                    
+                    const payload = {
+                        habilitados: parseInt(formData.get('habilitados')),
+                        votantes: parseInt(formData.get('votantes')),
+                        votos: {},
+                        lastUpdate: new Date(),
+                        estado: action === 'cerrar' ? 'cerrada' : 'borrador'
+                    };
+                    
+                    listasOficializadas.forEach(lista => {
+                        payload.votos[lista.id] = {
+                            senadores: parseInt(formData.get(`senadores_${lista.id}`)) || 0,
+                            concejales: parseInt(formData.get(`concejales_${lista.id}`)) || 0,
+                        };
+                    });
+
+                    // Subir imagen si existe
+                    const fileInput = form.querySelector('input[type="file"]');
+                    if (fileInput.files[0]) {
+                        const file = fileInput.files[0];
+                        const storageRef = ref(storage, `certificados/${currentFiscal.escuela_id}/${mesaId}/${file.name}`);
+                        const snapshot = await uploadBytes(storageRef, file);
+                        payload.certificadoUrl = await getDownloadURL(snapshot.ref);
+                    }
+
+                    // Guardar en Firestore
+                    const mesaDocRef = doc(db, `escuelas/${currentFiscal.escuela_id}/mesas`, mesaId);
+                    await setDoc(mesaDocRef, payload, { merge: true });
+                    
+                    showFeedback(action === 'cerrar' ? `Mesa ${mesaId} cerrada con éxito.` : `Borrador de mesa ${mesaId} guardado.`);
+                    
+                    // Recargar la vista de la mesa
+                    loadingContainer.classList.remove('hidden');
+                    renderMesas(mesasIds);
+
+                } catch (error) {
+                    console.error("Error al guardar datos de mesa:", error);
+                    alert(`Error al guardar: ${error.message}`);
+                    submitButton.textContent = e.submitter.textContent;
+                    submitButton.disabled = false;
+                }
+            });
+
+            return mesaWrapper;
+        }
+        
+        function showFeedback(message) {
+            const modal = document.getElementById('feedback-modal');
+            const msgEl = document.getElementById('feedback-message');
+            msgEl.textContent = message;
+            modal.classList.remove('hidden');
+            setTimeout(() => modal.classList.add('hidden'), 2500);
+        }
+
+    </script>
+</body>
+</html>
