@@ -325,11 +325,13 @@
 
         function parseCSV(text) {
             const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-            const header = lines[0].split(',').map(h => h.trim());
+            // Soportar archivos CSV separados por punto y coma (Excel en español)
+            const delimiter = lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',';
+            const header = lines[0].split(delimiter).map(h => h.trim());
             return lines.slice(1).map(line => {
-                const values = line.split(',');
+                const values = line.split(delimiter);
                 return header.reduce((obj, h, i) => {
-                    obj[h] = values[i].trim().replace(/"/g, '');
+                    obj[h] = values[i] ? values[i].trim().replace(/"/g, '') : '';
                     return obj;
                 }, {});
             });
