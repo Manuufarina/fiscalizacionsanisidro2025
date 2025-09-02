@@ -1,19 +1,19 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const cors = require("cors")({ origin: true });
 
 admin.initializeApp();
 
 // --- CSV PARSER ---
+// A simple parser, not robust for complex CSVs (e.g., with commas in values)
 function parseCSV(text) {
     const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
     if (lines.length < 2) {
-        throw new Error('El CSV debe tener un encabezado y al menos una fila de datos.');
+        throw new functions.https.HttpsError('invalid-argument', 'El CSV debe tener un encabezado y al menos una fila de datos.');
     }
     const header = lines[0].split(',').map(h => h.trim());
     const requiredHeaders = ['escuela_id', 'dni'];
     if (!requiredHeaders.every(h => header.includes(h))) {
-        throw new Error(`El encabezado del CSV debe contener las columnas: ${requiredHeaders.join(', ')}.`);
+        throw new functions.https.HttpsError('invalid-argument', `El encabezado del CSV debe contener las columnas: ${requiredHeaders.join(', ')}.`);
     }
 
     return lines.slice(1).map(line => {
@@ -25,31 +25,29 @@ function parseCSV(text) {
     });
 }
 
-// --- CLOUD FUNCTION: createUsersFromCSV (now an onRequest function) ---
-exports.createUsersFromCSV = functions.https.onRequest((req, res) => {
-    // Wrap the function with CORS
-    cors(req, res, async () => {
-        // We only accept POST requests
-        if (req.method !== 'POST') {
-            return res.status(405).send('Method Not Allowed');
-        }
 
-        const csvData = req.body.csv;
+// --- CLOUD FUNCTION: createUsersFromCSV ---
+exports.createUsersFromCSV = functions.https.onCall(async (data, context) => {
+    try {
+        // Basic auth check: in a real app, you'd check if the caller is an admin
+        // For now, we trust the security rule on the admin page itself.
+
+        const csvData = data.csv;
         if (!csvData) {
-            return res.status(400).json({ message: 'No se proporcionaron datos CSV.' });
+            throw new functions.https.HttpsError('invalid-argument', 'No se proporcionaron datos CSV.');
         }
 
         let parsedData;
         try {
             parsedData = parseCSV(csvData);
         } catch (error) {
-            return res.status(400).json({ message: error.message });
+            throw error; // Re-throw parsing errors to be caught by the main try-catch
         }
 
         const results = {
             successCount: 0,
             errorCount: 0,
-            details: [], // Renamed from 'errors' to match client expectation
+            details: [], // Match client expectation for 'details'
         };
 
         for (const record of parsedData) {
@@ -88,18 +86,36 @@ exports.createUsersFromCSV = functions.https.onRequest((req, res) => {
                      errorMessage = `El usuario ${email} ya existe.`;
                 }
                 results.details.push(errorMessage);
+                // Log individual user creation errors
+                functions.logger.warn(`Failed to create user for escuela_id ${escuela_id}`, { error: error.message });
             }
         }
 
         if (results.errorCount > 0) {
-            console.error("Errores durante la carga:", results.details);
+            functions.logger.warn("Proceso de carga de CSV completado con errores.", {
+                errors: results.details,
+                totalErrors: results.errorCount,
+                totalSuccess: results.successCount,
+            });
         }
 
-        // Send the response
-        res.status(200).json({
+        return {
             message: `Proceso completado. ${results.successCount} usuarios creados, ${results.errorCount} errores.`,
-            errorCount: results.errorCount,
             details: results.details,
+            errorCount: results.errorCount,
+        };
+    } catch (error) {
+        // Main catch block for unexpected errors.
+        functions.logger.error("Error no manejado en createUsersFromCSV", {
+            errorMessage: error.message,
+            errorCode: error.code,
+            errorStack: error.stack,
         });
-    });
+
+        // Re-throw a generic error to the client to avoid leaking implementation details.
+        if (error instanceof functions.https.HttpsError) {
+            throw error; // If it's already a formatted HttpsError, rethrow it.
+        }
+        throw new functions.https.HttpsError('internal', 'Ocurrió un error inesperado al procesar su solicitud.');
+    }
 });
