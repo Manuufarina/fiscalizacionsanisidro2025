@@ -107,10 +107,18 @@
             e.preventDefault();
             const escuelaId = document.getElementById('escuela-id').value.trim();
             const dni = document.getElementById('dni').value.trim();
-            
+
+            loginError.classList.add('hidden');
+
+            // Validar que el número de escuela sea numérico
+            if (!/^\d+$/.test(escuelaId)) {
+                loginError.textContent = 'Ingrese un número de escuela válido.';
+                loginError.classList.remove('hidden');
+                return;
+            }
+
             loginButton.textContent = 'Ingresando...';
             loginButton.disabled = true;
-            loginError.classList.add('hidden');
 
             try {
                 // El email se construye como `escuela{id}@fiscal.app`
@@ -119,7 +127,9 @@
                 // onAuthStateChanged se encargará del resto
             } catch (error) {
                 console.error("Error de login:", error);
-                loginError.textContent = 'Escuela o DNI incorrecto.';
+                loginError.textContent = error.code === 'auth/invalid-email'
+                    ? 'Ingrese un número de escuela válido.'
+                    : 'Escuela o DNI incorrecto.';
                 loginError.classList.remove('hidden');
                 loginButton.textContent = 'Ingresar';
                 loginButton.disabled = false;
