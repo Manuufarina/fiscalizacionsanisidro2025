@@ -33,8 +33,8 @@ exports.createUsersFromCSV = functions.https.onCall(async (data, context) => {
         // For now, we trust the security rule on the admin page itself.
 
         const csvData = data.csv;
-        if (!csvData) {
-            throw new functions.https.HttpsError('invalid-argument', 'No se proporcionaron datos CSV.');
+        if (typeof csvData !== 'string' || csvData.length === 0) {
+            throw new functions.https.HttpsError('invalid-argument', 'El archivo CSV está vacío o el formato de los datos no es correcto.');
         }
 
         let parsedData;
