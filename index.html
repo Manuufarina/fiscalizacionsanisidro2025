@@ -136,11 +136,23 @@
                 // 1. Obtener datos del fiscal
                 const fiscalDocRef = doc(db, 'fiscales', fiscalUid);
                 const fiscalDoc = await getDoc(fiscalDocRef);
-                if (!fiscalDoc.exists()) throw new Error("Datos de fiscal no encontrados.");
-                currentFiscal = { uid: fiscalUid, ...fiscalDoc.data() };
-                
+                let escuelaId;
+
+                if (fiscalDoc.exists()) {
+                    currentFiscal = { uid: fiscalUid, ...fiscalDoc.data() };
+                    escuelaId = currentFiscal.escuela_id;
+                } else {
+                    // Extraer el ID de escuela desde el email si falta el documento del fiscal
+                    const match = auth.currentUser?.email?.match(/escuela(\d+)@/);
+                    if (!match) throw new Error("Datos de fiscal no encontrados.");
+                    escuelaId = match[1];
+                    currentFiscal = { uid: fiscalUid, escuela_id: escuelaId };
+                    // Persistir el documento del fiscal para futuros ingresos
+                    await setDoc(fiscalDocRef, { escuela_id: escuelaId });
+                }
+
                 // 2. Obtener datos de la escuela asignada
-                const escuelaDocRef = doc(db, 'escuelas', currentFiscal.escuela_id);
+                const escuelaDocRef = doc(db, 'escuelas', escuelaId);
                 const escuelaDoc = await getDoc(escuelaDocRef);
                 if (!escuelaDoc.exists()) throw new Error("Datos de escuela no encontrados.");
                 const escuelaData = { id: escuelaDoc.id, ...escuelaDoc.data() };
