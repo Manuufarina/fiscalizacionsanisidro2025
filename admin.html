@@ -103,7 +103,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="module">
         import { app, db } from '/firebase-config.js';
-        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-functions.js";
         import { collection, onSnapshot, collectionGroup, query, setDoc, doc, writeBatch } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
         // --- GLOBAL STATE ---
@@ -299,11 +298,23 @@
                     try {
                         const text = await file.text();
                         if (type === 'fiscales') {
-                            const createUsers = httpsCallable(getFunctions(app), 'createUsersFromCSV');
-                            const result = await createUsers({ csv: text });
-                            showUploadFeedback(result.data.message, result.data.errorCount > 0);
-                             if (result.data.details && result.data.details.length > 0) {
-                                console.warn("Detalles de la carga:", result.data.details);
+                            const functionUrl = 'https://us-central1-fiscalizacion-san-isidro.cloudfunctions.net/createUsersFromCSV';
+                            const response = await fetch(functionUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ csv: text })
+                            });
+
+                            const result = await response.json(); // Always parse JSON
+
+                            if (!response.ok) {
+                                // Use message from parsed JSON if available
+                                throw new Error(result.message || `Error del servidor: ${response.statusText}`);
+                            }
+
+                            showUploadFeedback(result.message, result.errorCount > 0);
+                             if (result.details && result.details.length > 0) {
+                                console.warn("Detalles de la carga:", result.details);
                             }
                         } else {
                             const data = parseCSV(text);
