@@ -32,7 +32,7 @@
         </div>
     </div>
     <script type="module">
-        import { app, auth } from '/firebase-config.js';
+        import { auth } from '/firebase-config.js';
         import { signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
 
         const loginForm = document.getElementById('admin-login-form');
@@ -43,15 +43,14 @@
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
 
-            if (username === 'admin' && password === 'pana2025!') {
+            if (username === 'fiscalizacion2025' && password === 'Pana2025!') {
                 try {
-                    // Iniciar sesión en Firebase Auth para tener permisos en Firestore/Functions
-                    const email = `${username}@fiscal.app`;
-                    await signInWithEmailAndPassword(auth, email, password);
+                    await signInWithEmailAndPassword(auth, 'fiscalizacion2025@fiscal.app', 'Pana2025!');
                     sessionStorage.setItem('admin-auth-token', 'logged_in');
                     window.location.href = 'admin.html';
                 } catch (err) {
-                    loginError.textContent = 'Error al iniciar sesión. Verifique credenciales.';
+                    console.error('Error de autenticación:', err);
+                    loginError.textContent = 'Error al autenticar con el servidor.';
                     loginError.classList.remove('hidden');
                 }
             } else {
