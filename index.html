@@ -29,7 +29,7 @@
         <div class="w-full max-w-md bg-white p-8 rounded-2xl shadow-lg">
             <h1 class="text-2xl font-bold text-center text-gray-800 mb-2">Fiscalización Electoral</h1>
             <p class="text-center text-gray-500 mb-2">San Isidro 2025</p>
-            <p class="text-sm text-center text-gray-600 mb-6">El usuario es <code>escuela{id}@fiscal.app</code> y la contraseña es el DNI del fiscal general asignado.</p>
+            <p class="text-sm text-center text-gray-600 mb-6">El usuario es el número de la escuela y la contraseña es el DNI del fiscal general asignado.</p>
             <form id="login-form">
                 <div class="mb-4">
                     <label for="escuela-id" class="block text-sm font-medium text-gray-700 mb-1">N° de Escuela</label>
@@ -75,8 +75,7 @@
 
 
     <script type="module">
-        import { app, db, auth, storage } from '/firebase-config.js';
-        import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
+        import { app, db, storage } from '/firebase-config.js';
         import { doc, getDoc, getDocs, collection, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
         import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js";
 
@@ -93,13 +92,11 @@
         let listasOficializadas = [];
         let currentFiscal = null;
 
-        // --- MANEJO DE AUTENTICACIÓN ---
-        onAuthStateChanged(auth, user => {
-            if (user) {
-                // Usuario logueado
-                loadFiscalData(user.uid);
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedEscuela = sessionStorage.getItem('escuela-id');
+            if (savedEscuela) {
+                loadFiscalData(savedEscuela);
             } else {
-                // Usuario no logueado
                 showLoginScreen();
             }
         });
@@ -109,74 +106,63 @@
             // Sanitize input to only keep numbers, preventing invalid email format
             const rawEscuelaId = document.getElementById('escuela-id').value;
             const escuelaId = rawEscuelaId.replace(/\D/g, '');
+            document.getElementById('escuela-id').value = escuelaId;
             const dni = document.getElementById('dni').value.trim();
-            
+
+            if (!escuelaId || !dni) {
+                loginError.textContent = 'Ingrese un número de escuela y DNI válidos.';
+                loginError.classList.remove('hidden');
+                return;
+            }
+
             loginButton.textContent = 'Ingresando...';
             loginButton.disabled = true;
             loginError.classList.add('hidden');
 
             try {
-                // El email se construye como `escuela{id}@fiscal.app`
-                const email = `escuela${escuelaId}@fiscal.app`;
-                await signInWithEmailAndPassword(auth, email, dni);
-                // onAuthStateChanged se encargará del resto
+                const fiscalDoc = await getDoc(doc(db, 'fiscales', escuelaId));
+                if (fiscalDoc.exists() && fiscalDoc.data().dni === dni) {
+                    sessionStorage.setItem('escuela-id', escuelaId);
+                    await loadFiscalData(escuelaId);
+                } else {
+                    loginError.textContent = 'Escuela o DNI incorrecto.';
+                    loginError.classList.remove('hidden');
+                }
             } catch (error) {
                 console.error("Error de login:", error);
-                loginError.textContent = 'Escuela o DNI incorrecto.';
+                loginError.textContent = 'Error al verificar los datos.';
                 loginError.classList.remove('hidden');
+            } finally {
                 loginButton.textContent = 'Ingresar';
                 loginButton.disabled = false;
             }
         });
-        
+
         logoutButton.addEventListener('click', () => {
-            signOut(auth);
+            sessionStorage.removeItem('escuela-id');
+            showLoginScreen();
         });
         
         // --- CARGA DE DATOS ---
-        async function loadFiscalData(fiscalUid) {
+        async function loadFiscalData(escuelaId) {
             try {
-                // 1. Obtener datos del fiscal
-                const fiscalDocRef = doc(db, 'fiscales', fiscalUid);
-                const fiscalDoc = await getDoc(fiscalDocRef);
-                let escuelaId;
+                currentFiscal = { escuela_id: escuelaId };
 
-                if (fiscalDoc.exists()) {
-                    currentFiscal = { uid: fiscalUid, ...fiscalDoc.data() };
-                    escuelaId = currentFiscal.escuela_id;
-                } else {
-                    // Extraer el ID de escuela desde el email si falta el documento del fiscal
-                    const match = auth.currentUser?.email?.match(/escuela(\d+)@/);
-                    if (!match) throw new Error("Datos de fiscal no encontrados.");
-                    escuelaId = match[1];
-                    currentFiscal = { uid: fiscalUid, escuela_id: escuelaId };
-                    // Persistir el documento del fiscal para futuros ingresos
-                    await setDoc(fiscalDocRef, { escuela_id: escuelaId });
-                }
-
-                // 2. Obtener datos de la escuela asignada
                 const escuelaDocRef = doc(db, 'escuelas', escuelaId);
                 const escuelaDoc = await getDoc(escuelaDocRef);
                 if (!escuelaDoc.exists()) throw new Error("Datos de escuela no encontrados.");
                 const escuelaData = { id: escuelaDoc.id, ...escuelaDoc.data() };
 
-                // 3. Cargar listas de partidos
                 const listasSnapshot = await getDocs(collection(db, 'listas'));
                 listasOficializadas = listasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-                // 4. Mostrar la app y renderizar mesas
                 showMainApp(escuelaData);
                 renderMesas(escuelaData.mesas);
             } catch (error) {
                 console.error("Error al cargar datos:", error);
-                let userMessage = "Error crítico al cargar los datos. Intente recargar la página.";
-                if (error.message.includes("Datos de escuela no encontrados")) {
-                    userMessage = `La escuela asignada no fue encontrada en la base de datos. Por favor, contacte a un administrador.`;
-                } else if (error.message.includes("Datos de fiscal no encontrados")) {
-                    userMessage = "No se pudo verificar su identidad como fiscal. Por favor, contacte a un administrador.";
-                }
-                alert(userMessage);
-                signOut(auth);
+                alert("Error crítico al cargar los datos. Intente recargar la página.");
+                sessionStorage.removeItem('escuela-id');
+                showLoginScreen();
             }
         }
 
