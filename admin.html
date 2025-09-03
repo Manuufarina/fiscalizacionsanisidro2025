@@ -102,10 +102,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="module">
-        import { db, blob } from '/vercel-config.js';
-        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-functions.js";
-        import { collection, onSnapshot, collectionGroup, query, setDoc, doc, writeBatch } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
-        import { signOut } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
+        import { blob } from '/vercel-config.js';
 
         // --- GLOBAL STATE ---
         let globalData = { listas: {}, escuelas: {}, mesas: {} };
@@ -116,8 +113,7 @@
 
         // --- LOGOUT ---
         const logoutButton = document.getElementById('logout-button');
-        logoutButton.addEventListener('click', async () => {
-            await signOut(auth);
+        logoutButton.addEventListener('click', () => {
             sessionStorage.removeItem('admin-auth-token');
             window.location.href = 'admin_login.html';
         });
@@ -127,50 +123,29 @@
             initMap();
             setupChartToggle();
             setupUploadForms();
-
-            listenToListas();
-            listenToEscuelas();
-            listenToMesas();
+            loadExistingData();
         });
 
-        // --- REAL-TIME LISTENERS ---
-        function listenToListas() {
-            onSnapshot(collection(db, 'listas'), snapshot => {
-                snapshot.docs.forEach(doc => { globalData.listas[doc.id] = doc.data(); });
+        // --- LOAD EXISTING DATA FROM BLOB ---
+        async function loadExistingData() {
+            try {
+                globalData.listas = await loadBlobDataset('listas');
+                globalData.escuelas = await loadBlobDataset('escuelas');
+                globalData.mesas = await loadBlobDataset('mesas');
                 updateDashboard();
-            });
+            } catch (err) {
+                console.warn('No se pudieron cargar datos existentes', err);
+            }
         }
 
-        function listenToEscuelas() {
-            onSnapshot(collection(db, 'escuelas'), snapshot => {
-                snapshot.docChanges().forEach(change => {
-                    const esc = { id: change.doc.id, ...change.doc.data() };
-                    if (change.type === "added" || change.type === "modified") {
-                        globalData.escuelas[esc.id] = esc;
-                    }
-                    if (change.type === "removed") {
-                        delete globalData.escuelas[esc.id];
-                    }
-                });
-                updateDashboard();
-            });
-        }
-
-        function listenToMesas() {
-            const mesasQuery = query(collectionGroup(db, 'mesas'));
-            onSnapshot(mesasQuery, snapshot => {
-                 snapshot.docChanges().forEach(change => {
-                    const mesa = { id: change.doc.id, ...change.doc.data() };
-                    const escuelaId = change.doc.ref.parent.parent.id;
-                    if (change.type === "added" || change.type === "modified") {
-                        globalData.mesas[mesa.id] = { ...mesa, escuelaId };
-                    }
-                    if (change.type === "removed") {
-                        delete globalData.mesas[mesa.id];
-                    }
-                });
-                updateDashboard();
-            });
+        async function loadBlobDataset(name) {
+            const { blobs } = await blob.list({ prefix: `${name}.json` });
+            if (!blobs || blobs.length === 0) return {};
+            const res = await fetch(blobs[0].url);
+            const arr = await res.json();
+            return Array.isArray(arr)
+                ? arr.reduce((acc, item) => { acc[item.id] = item; return acc; }, {})
+                : arr;
         }
 
         // --- DASHBOARD UPDATES ---
@@ -300,18 +275,9 @@
 
                     try {
                         const text = await file.text();
-                        if (type === 'fiscales') {
-                            const createUsers = httpsCallable(getFunctions(app), 'createUsersFromCSV');
-                            const result = await createUsers({ csv: text });
-                            showUploadFeedback(result.data.message, result.data.errorCount > 0);
-                             if (result.data.details && result.data.details.length > 0) {
-                                console.warn("Detalles de la carga:", result.data.details);
-                            }
-                        } else {
-                            const data = parseCSV(text);
-                            await uploadData(type, data);
-                            showUploadFeedback(`¡${data.length} registros de ${type} cargados!`);
-                        }
+                        const data = parseCSV(text);
+                        await uploadData(type, data);
+                        showUploadFeedback(`¡${data.length} registros de ${type} cargados!`);
                     } catch (err) {
                         console.error("Error en carga:", err);
                         const errorMessage = err.message || "Ocurrió un error desconocido.";
@@ -340,30 +306,29 @@
         }
 
         async function uploadData(type, data) {
-            const batch = writeBatch(db);
             switch(type) {
                 case 'listas':
                     data.forEach(item => {
-                        const docRef = doc(db, "listas", item.id);
-                        batch.set(docRef, { nombre_lista: item.nombre_lista });
+                        globalData.listas[item.id] = { nombre_lista: item.nombre_lista };
                     });
+                    await blob.put('listas.json', JSON.stringify(Object.entries(globalData.listas).map(([id, val]) => ({ id, ...val }))), { contentType: 'application/json', access: 'public' });
                     break;
                 case 'escuelas':
-                     data.forEach(item => {
-                        const docRef = doc(db, "escuelas", item.id);
-                        batch.set(docRef, {
+                    data.forEach(item => {
+                        globalData.escuelas[item.id] = {
                             nombre: item.nombre,
                             lat: parseFloat(item.lat),
                             lng: parseFloat(item.lng),
-                            mesas: item.mesas.split(',').map(m => m.trim()) // BUG FIX: Changed from ';' to ','
-                        });
+                            mesas: item.mesas.split(',').map(m => m.trim())
+                        };
                     });
+                    await blob.put('escuelas.json', JSON.stringify(Object.entries(globalData.escuelas).map(([id, val]) => ({ id, ...val }))), { contentType: 'application/json', access: 'public' });
                     break;
-                // 'fiscales' case is now handled by the Cloud Function
+                case 'fiscales':
+                    await blob.put('fiscales.json', JSON.stringify(data), { contentType: 'application/json', access: 'public' });
+                    break;
             }
-            if (type !== 'fiscales') {
-               await batch.commit();
-            }
+            updateDashboard();
         }
 
         function showUploadFeedback(message, isError = false) {
