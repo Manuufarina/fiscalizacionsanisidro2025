@@ -32,7 +32,7 @@
         </div>
     </div>
     <script type="module">
-        import { app, auth } from '/firebase-config.js';
+        import { db, blob } from '/vercel-config.js';
         import { signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
 
         const loginForm = document.getElementById('admin-login-form');

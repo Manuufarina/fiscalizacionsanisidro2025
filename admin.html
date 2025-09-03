@@ -102,7 +102,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="module">
-        import { app, db, auth } from '/firebase-config.js';
+        import { db, blob } from '/vercel-config.js';
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-functions.js";
         import { collection, onSnapshot, collectionGroup, query, setDoc, doc, writeBatch } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
         import { signOut } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
