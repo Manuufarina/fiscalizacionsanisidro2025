@@ -9,9 +9,5 @@
   },
   "devDependencies": {
     "tailwindcss": "^3.4.4"
-  },
-  "dependencies": {
-    "@vercel/blob": "^1.1.1",
-    "@vercel/postgres": "^0.10.0"
   }
 }

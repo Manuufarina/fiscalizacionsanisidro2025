@@ -1,33 +1,19 @@
-import { createPool } from '@vercel/postgres';
-import { put as blobPut, list as blobList, del as blobDel, head as blobHead } from '@vercel/blob';
+// Vercel Blob client via CDN for dashboard data persistence
+import { put as blobPut, del as blobDel, head as blobHead } from 'https://esm.sh/@vercel/blob@1.1.1';
 
-const {
-  POSTGRES_URL,
-  BLOB_READ_WRITE_TOKEN,
-  BLOB_STORE_ID,
-} = process.env;
-
-if (!POSTGRES_URL) {
-  throw new Error('POSTGRES_URL env var is not set');
-}
-if (!BLOB_READ_WRITE_TOKEN) {
-  throw new Error('BLOB_READ_WRITE_TOKEN env var is not set');
-}
-if (!BLOB_STORE_ID) {
-  throw new Error('BLOB_STORE_ID env var is not set');
-}
-
-const db = createPool({ connectionString: POSTGRES_URL });
+// Token for Vercel Blob operations
+const BLOB_TOKEN = 'vercel_blob_rw_t3xlaMIgr85aZOXy_NaxucdEUMociBnvV09S74OqRvTYfs8';
+const BLOB_BASE_URL = `${location.origin}/api/blob`;
 
 const blob = {
   put: (pathname, body, options = {}) =>
-    blobPut(pathname, body, { token: BLOB_READ_WRITE_TOKEN, storeId: BLOB_STORE_ID, ...options }),
-  list: (options = {}) =>
-    blobList({ token: BLOB_READ_WRITE_TOKEN, storeId: BLOB_STORE_ID, ...options }),
+    blobPut(pathname, body, { token: BLOB_TOKEN, addRandomSuffix: false, ...options }),
   del: (urlOrPathname, options = {}) =>
-    blobDel(urlOrPathname, { token: BLOB_READ_WRITE_TOKEN, storeId: BLOB_STORE_ID, ...options }),
+    blobDel(urlOrPathname, { token: BLOB_TOKEN, ...options }),
   head: (urlOrPathname, options = {}) =>
-    blobHead(urlOrPathname, { token: BLOB_READ_WRITE_TOKEN, storeId: BLOB_STORE_ID, ...options }),
+    blobHead(urlOrPathname, { token: BLOB_TOKEN, ...options }),
+  url: (pathname) => `${BLOB_BASE_URL}/${pathname}`
 };
 
-export { db, blob };
+export { blob };
+
