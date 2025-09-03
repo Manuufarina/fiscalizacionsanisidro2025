@@ -1,33 +1,40 @@
-import { createPool } from '@vercel/postgres';
-import { put as blobPut, list as blobList, del as blobDel, head as blobHead } from '@vercel/blob';
+// Firebase setup (used by index.html for existing auth & Firestore flows)
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js';
+import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js';
+import { getAuth } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js';
+import { getStorage } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js';
 
-const {
-  POSTGRES_URL,
-  BLOB_READ_WRITE_TOKEN,
-  BLOB_STORE_ID,
-} = process.env;
+// Vercel Blob client via CDN for dashboard data persistence
+import { put as blobPut, list as blobList, del as blobDel, head as blobHead } from 'https://esm.sh/@vercel/blob@1.1.1';
 
-if (!POSTGRES_URL) {
-  throw new Error('POSTGRES_URL env var is not set');
-}
-if (!BLOB_READ_WRITE_TOKEN) {
-  throw new Error('BLOB_READ_WRITE_TOKEN env var is not set');
-}
-if (!BLOB_STORE_ID) {
-  throw new Error('BLOB_STORE_ID env var is not set');
-}
+// Existing Firebase project configuration
+const firebaseConfig = {
+  apiKey: 'AIzaSyAAaqOajWwLX_K9PF0NLvYM4Ecvpkq2qbI',
+  authDomain: 'fiscalizacion-san-isidro.firebaseapp.com',
+  projectId: 'fiscalizacion-san-isidro',
+  storageBucket: 'fiscalizacion-san-isidro.firebasestorage.app',
+  messagingSenderId: '316196246026',
+  appId: '1:316196246026:web:8b0546f002ef811a6705f3'
+};
 
-const db = createPool({ connectionString: POSTGRES_URL });
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const storage = getStorage(app);
+
+// Token for Vercel Blob operations
+const BLOB_TOKEN = 'vercel_blob_rw_t3xlaMIgr85aZOXy_NaxucdEUMociBnvV09S74OqRvTYfs8';
 
 const blob = {
   put: (pathname, body, options = {}) =>
-    blobPut(pathname, body, { token: BLOB_READ_WRITE_TOKEN, storeId: BLOB_STORE_ID, ...options }),
+    blobPut(pathname, body, { token: BLOB_TOKEN, addRandomSuffix: false, ...options }),
   list: (options = {}) =>
-    blobList({ token: BLOB_READ_WRITE_TOKEN, storeId: BLOB_STORE_ID, ...options }),
+    blobList({ token: BLOB_TOKEN, ...options }),
   del: (urlOrPathname, options = {}) =>
-    blobDel(urlOrPathname, { token: BLOB_READ_WRITE_TOKEN, storeId: BLOB_STORE_ID, ...options }),
+    blobDel(urlOrPathname, { token: BLOB_TOKEN, ...options }),
   head: (urlOrPathname, options = {}) =>
-    blobHead(urlOrPathname, { token: BLOB_READ_WRITE_TOKEN, storeId: BLOB_STORE_ID, ...options }),
+    blobHead(urlOrPathname, { token: BLOB_TOKEN, ...options })
 };
 
-export { db, blob };
+export { app, db, auth, storage, blob };
+
