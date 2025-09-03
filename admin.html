@@ -101,11 +101,13 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Estas variables deben definirse con los valores reales en el entorno de despliegue
+        window.BLOB_READ_WRITE_TOKEN = window.BLOB_READ_WRITE_TOKEN || 'YOUR_BLOB_READ_WRITE_TOKEN';
+        window.BLOB_STORE_ID = window.BLOB_STORE_ID || 'YOUR_BLOB_STORE_ID';
+    </script>
     <script type="module">
-        import { app, db, auth } from '/firebase-config.js';
-        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-functions.js";
-        import { collection, onSnapshot, collectionGroup, query, setDoc, doc, writeBatch } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
-        import { signOut } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
+        import { blob } from '/vercel-config.js';
 
         // --- GLOBAL STATE ---
         let globalData = { listas: {}, escuelas: {}, mesas: {} };
@@ -116,61 +118,48 @@
 
         // --- LOGOUT ---
         const logoutButton = document.getElementById('logout-button');
-        logoutButton.addEventListener('click', async () => {
-            await signOut(auth);
+        logoutButton.addEventListener('click', () => {
             sessionStorage.removeItem('admin-auth-token');
             window.location.href = 'admin_login.html';
         });
 
         // --- INITIALIZATION ---
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             initMap();
             setupChartToggle();
             setupUploadForms();
-
-            listenToListas();
-            listenToEscuelas();
-            listenToMesas();
+            await loadDataFromBlob();
+            updateDashboard();
         });
 
-        // --- REAL-TIME LISTENERS ---
-        function listenToListas() {
-            onSnapshot(collection(db, 'listas'), snapshot => {
-                snapshot.docs.forEach(doc => { globalData.listas[doc.id] = doc.data(); });
-                updateDashboard();
-            });
-        }
-
-        function listenToEscuelas() {
-            onSnapshot(collection(db, 'escuelas'), snapshot => {
-                snapshot.docChanges().forEach(change => {
-                    const esc = { id: change.doc.id, ...change.doc.data() };
-                    if (change.type === "added" || change.type === "modified") {
-                        globalData.escuelas[esc.id] = esc;
-                    }
-                    if (change.type === "removed") {
-                        delete globalData.escuelas[esc.id];
-                    }
-                });
-                updateDashboard();
-            });
-        }
-
-        function listenToMesas() {
-            const mesasQuery = query(collectionGroup(db, 'mesas'));
-            onSnapshot(mesasQuery, snapshot => {
-                 snapshot.docChanges().forEach(change => {
-                    const mesa = { id: change.doc.id, ...change.doc.data() };
-                    const escuelaId = change.doc.ref.parent.parent.id;
-                    if (change.type === "added" || change.type === "modified") {
-                        globalData.mesas[mesa.id] = { ...mesa, escuelaId };
-                    }
-                    if (change.type === "removed") {
-                        delete globalData.mesas[mesa.id];
-                    }
-                });
-                updateDashboard();
-            });
+        // --- DATA LOADING ---
+        async function loadDataFromBlob() {
+            const types = ['listas', 'escuelas', 'mesas'];
+            await Promise.all(types.map(async (type) => {
+                try {
+                    const url = `https://${window.BLOB_STORE_ID}.public.blob.vercel-storage.com/${type}.json`;
+                    const res = await fetch(url);
+                    if (!res.ok) return;
+                    const arr = await res.json();
+                    arr.forEach(item => {
+                        if (type === 'listas') {
+                            globalData.listas[item.id] = { nombre_lista: item.nombre_lista };
+                        } else if (type === 'escuelas') {
+                            globalData.escuelas[item.id] = {
+                                id: item.id,
+                                nombre: item.nombre,
+                                lat: parseFloat(item.lat),
+                                lng: parseFloat(item.lng),
+                                mesas: item.mesas || []
+                            };
+                        } else if (type === 'mesas') {
+                            globalData.mesas[item.id] = item;
+                        }
+                    });
+                } catch (e) {
+                    console.error('Error loading', type, e);
+                }
+            }));
         }
 
         // --- DASHBOARD UPDATES ---
@@ -340,30 +329,34 @@
         }
 
         async function uploadData(type, data) {
-            const batch = writeBatch(db);
-            switch(type) {
-                case 'listas':
-                    data.forEach(item => {
-                        const docRef = doc(db, "listas", item.id);
-                        batch.set(docRef, { nombre_lista: item.nombre_lista });
-                    });
-                    break;
-                case 'escuelas':
-                     data.forEach(item => {
-                        const docRef = doc(db, "escuelas", item.id);
-                        batch.set(docRef, {
-                            nombre: item.nombre,
-                            lat: parseFloat(item.lat),
-                            lng: parseFloat(item.lng),
-                            mesas: item.mesas.split(',').map(m => m.trim()) // BUG FIX: Changed from ';' to ','
-                        });
-                    });
-                    break;
-                // 'fiscales' case is now handled by the Cloud Function
+            // Persist data as JSON in Vercel Blob
+            await blob.put(`${type}.json`, JSON.stringify(data), {
+                contentType: 'application/json',
+                access: 'public'
+            });
+
+            // Update local state so the dashboard reflects new data without reload
+            if (type === 'listas') {
+                data.forEach(item => {
+                    globalData.listas[item.id] = { nombre_lista: item.nombre_lista };
+                });
+            } else if (type === 'escuelas') {
+                data.forEach(item => {
+                    globalData.escuelas[item.id] = {
+                        id: item.id,
+                        nombre: item.nombre,
+                        lat: parseFloat(item.lat),
+                        lng: parseFloat(item.lng),
+                        mesas: item.mesas.split(',').map(m => m.trim())
+                    };
+                });
+            } else if (type === 'fiscales') {
+                // Store raw fiscal assignments for potential processing later
+                data.forEach(item => {
+                    globalData.mesas[item.dni] = { escuela_id: item.escuela_id, dni: item.dni };
+                });
             }
-            if (type !== 'fiscales') {
-               await batch.commit();
-            }
+            updateDashboard();
         }
 
         function showUploadFeedback(message, isError = false) {
