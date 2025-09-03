@@ -32,8 +32,7 @@
         </div>
     </div>
     <script type="module">
-        import { app, auth } from '/firebase-config.js';
-        import { signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
+        import { db, blob } from '/vercel-config.js';
 
         const loginForm = document.getElementById('admin-login-form');
         const loginError = document.getElementById('login-error');
@@ -44,16 +43,8 @@
             const password = document.getElementById('password').value;
 
             if (username === 'fiscalizacion2025' && password === 'Pana2025!') {
-                try {
-                    // Iniciar sesión en Firebase Auth para tener permisos en Firestore/Functions
-                    const email = `${username}@fiscal.app`;
-                    await signInWithEmailAndPassword(auth, email, password);
-                    sessionStorage.setItem('admin-auth-token', 'logged_in');
-                    window.location.href = 'admin.html';
-                } catch (err) {
-                    loginError.textContent = 'Error al iniciar sesión. Verifique credenciales.';
-                    loginError.classList.remove('hidden');
-                }
+                sessionStorage.setItem('admin-auth-token', 'logged_in');
+                window.location.href = 'admin.html';
             } else {
                 loginError.textContent = 'Usuario o contraseña incorrectos.';
                 loginError.classList.remove('hidden');
