@@ -87,7 +87,7 @@
                 <!-- Cargar Fiscales -->
                 <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
                     <h3 class="font-semibold text-lg mb-2">3. Cargar Fiscales</h3>
-                    <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `escuela{id}@fiscal.app` con el DNI como contraseña.</p>
+                    <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `{id}@fiscal.app` con el DNI como contraseña.</p>
                     <a href='data:text/csv;charset=utf-8,escuela_id;dni%0A15;12345678%0A22;87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
                     <form class="space-y-3 mt-auto" data-upload-type="fiscales">
                         <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
@@ -102,10 +102,8 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="module">
-        import { app, db, auth } from '/firebase-config.js';
-        import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-functions.js";
-        import { collection, onSnapshot, collectionGroup, query, setDoc, doc, writeBatch } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
-        import { signOut } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
+        import { app, db } from '/firebase-config.js';
+        import { collection, onSnapshot, collectionGroup, query } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
         // --- GLOBAL STATE ---
         let globalData = { listas: {}, escuelas: {}, mesas: {} };
@@ -116,8 +114,7 @@
 
         // --- LOGOUT ---
         const logoutButton = document.getElementById('logout-button');
-        logoutButton.addEventListener('click', async () => {
-            await signOut(auth);
+        logoutButton.addEventListener('click', () => {
             sessionStorage.removeItem('admin-auth-token');
             window.location.href = 'admin_login.html';
         });
@@ -300,18 +297,8 @@
 
                     try {
                         const text = await file.text();
-                        if (type === 'fiscales') {
-                            const createUsers = httpsCallable(getFunctions(app), 'createUsersFromCSV');
-                            const result = await createUsers({ csv: text });
-                            showUploadFeedback(result.data.message, result.data.errorCount > 0);
-                             if (result.data.details && result.data.details.length > 0) {
-                                console.warn("Detalles de la carga:", result.data.details);
-                            }
-                        } else {
-                            const data = parseCSV(text);
-                            await uploadData(type, data);
-                            showUploadFeedback(`¡${data.length} registros de ${type} cargados!`);
-                        }
+                        const result = await uploadData(type, text);
+                        showUploadFeedback(result.message);
                     } catch (err) {
                         console.error("Error en carga:", err);
                         const errorMessage = err.message || "Ocurrió un error desconocido.";
@@ -325,45 +312,32 @@
             });
         }
 
-        function parseCSV(text) {
-            const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-            // Soportar archivos CSV separados por punto y coma (Excel en español)
-            const delimiter = lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',';
-            const header = lines[0].split(delimiter).map(h => h.trim());
-            return lines.slice(1).map(line => {
-                const values = line.split(delimiter);
-                return header.reduce((obj, h, i) => {
-                    obj[h] = values[i] ? values[i].trim().replace(/"/g, '') : '';
-                    return obj;
-                }, {});
-            });
-        }
+        const FUNCTIONS_REGION = 'us-central1';
 
-        async function uploadData(type, data) {
-            const batch = writeBatch(db);
-            switch(type) {
-                case 'listas':
-                    data.forEach(item => {
-                        const docRef = doc(db, "listas", item.id);
-                        batch.set(docRef, { nombre_lista: item.nombre_lista });
-                    });
-                    break;
-                case 'escuelas':
-                     data.forEach(item => {
-                        const docRef = doc(db, "escuelas", item.id);
-                        batch.set(docRef, {
-                            nombre: item.nombre,
-                            lat: parseFloat(item.lat),
-                            lng: parseFloat(item.lng),
-                            mesas: item.mesas.split(',').map(m => m.trim()) // BUG FIX: Changed from ';' to ','
-                        });
-                    });
-                    break;
-                // 'fiscales' case is now handled by the Cloud Function
+        async function uploadData(type, csv) {
+            const fnName = {
+                listas: 'importListasFromCSV',
+                escuelas: 'importEscuelasFromCSV',
+                fiscales: 'createUsersFromCSV'
+            }[type];
+            const endpoint = `https://${FUNCTIONS_REGION}-${app.options.projectId}.cloudfunctions.net/${fnName}`;
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain' },
+                body: csv
+            });
+            const text = await response.text();
+            let data = {};
+            try { data = JSON.parse(text); } catch { if (text) data = { message: text }; }
+            if (!response.ok) {
+                const errMsg =
+                    (typeof data.error === 'string' && data.error) ||
+                    (data.error && data.error.message) ||
+                    data.message ||
+                    'Error en la carga.';
+                throw new Error(errMsg);
             }
-            if (type !== 'fiscales') {
-               await batch.commit();
-            }
+            return data;
         }
 
         function showUploadFeedback(message, isError = false) {
