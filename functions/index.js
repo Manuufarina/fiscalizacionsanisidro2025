@@ -36,7 +36,15 @@ exports.createUsersFromCSV = functions.https.onCall(async (data, context) => {
         // Basic auth check: in a real app, you'd check if the caller is an admin
         // For now, we trust the security rule on the admin page itself.
 
-        const csvData = typeof data === 'string' ? data : data?.csv;
+        let csvData = '';
+        if (typeof data === 'string') {
+            csvData = data;
+        } else if (data?.csv) {
+            csvData = data.csv;
+        } else if (data?.data?.csv) {
+            // Algunos clientes envían el payload envuelto en un objeto `data`
+            csvData = data.data.csv;
+        }
         if (typeof csvData !== 'string' || csvData.trim().length === 0) {
             throw new functions.https.HttpsError('invalid-argument', 'No se proporcionaron datos CSV.');
         }
@@ -63,7 +71,7 @@ exports.createUsersFromCSV = functions.https.onCall(async (data, context) => {
                 continue;
             }
 
-            const email = `escuela${escuela_id}@fiscal.app`;
+            const email = `${escuela_id}@fiscal.app`;
             const password = dni;
 
             try {

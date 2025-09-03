@@ -32,8 +32,8 @@
         </div>
     </div>
     <script type="module">
-        import { app, auth } from '/firebase-config.js';
-        import { signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
+        import { auth } from '/firebase-config.js';
+        import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
 
         const loginForm = document.getElementById('admin-login-form');
         const loginError = document.getElementById('login-error');
@@ -43,17 +43,29 @@
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
 
-            if (username === 'admin' && password === 'pana2025!') {
+            if (username === 'fiscalizacion2025' && password === 'Pana2025!') {
+                const email = 'fiscalizacion2025@fiscal.app';
                 try {
-                    // Iniciar sesión en Firebase Auth para tener permisos en Firestore/Functions
-                    const email = `${username}@fiscal.app`;
                     await signInWithEmailAndPassword(auth, email, password);
-                    sessionStorage.setItem('admin-auth-token', 'logged_in');
-                    window.location.href = 'admin.html';
                 } catch (err) {
-                    loginError.textContent = 'Error al iniciar sesión. Verifique credenciales.';
-                    loginError.classList.remove('hidden');
+                    if (err.code === 'auth/invalid-login-credentials') {
+                        try {
+                            await createUserWithEmailAndPassword(auth, email, password);
+                        } catch (createErr) {
+                            console.error('Error al crear usuario de administrador:', createErr);
+                            loginError.textContent = 'Error al autenticar con el servidor.';
+                            loginError.classList.remove('hidden');
+                            return;
+                        }
+                    } else {
+                        console.error('Error de autenticación:', err);
+                        loginError.textContent = 'Error al autenticar con el servidor.';
+                        loginError.classList.remove('hidden');
+                        return;
+                    }
                 }
+                sessionStorage.setItem('admin-auth-token', 'logged_in');
+                window.location.href = 'admin.html';
             } else {
                 loginError.textContent = 'Usuario o contraseña incorrectos.';
                 loginError.classList.remove('hidden');

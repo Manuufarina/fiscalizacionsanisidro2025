@@ -87,7 +87,7 @@
                 <!-- Cargar Fiscales -->
                 <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
                     <h3 class="font-semibold text-lg mb-2">3. Cargar Fiscales</h3>
-                    <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `escuela{id}@fiscal.app` con el DNI como contraseña.</p>
+                    <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `{id}@fiscal.app` con el DNI como contraseña.</p>
                     <a href='data:text/csv;charset=utf-8,escuela_id;dni%0A15;12345678%0A22;87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
                     <form class="space-y-3 mt-auto" data-upload-type="fiscales">
                         <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
@@ -105,7 +105,7 @@
         import { app, db, auth } from '/firebase-config.js';
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-functions.js";
         import { collection, onSnapshot, collectionGroup, query, setDoc, doc, writeBatch } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
-        import { signOut } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
+        import { signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
 
         // --- GLOBAL STATE ---
         let globalData = { listas: {}, escuelas: {}, mesas: {} };
@@ -124,13 +124,20 @@
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
-            initMap();
-            setupChartToggle();
-            setupUploadForms();
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    initMap();
+                    setupChartToggle();
+                    setupUploadForms();
 
-            listenToListas();
-            listenToEscuelas();
-            listenToMesas();
+                    listenToListas();
+                    listenToEscuelas();
+                    listenToMesas();
+                } else {
+                    sessionStorage.removeItem('admin-auth-token');
+                    window.location.replace('admin_login.html');
+                }
+            });
         });
 
         // --- REAL-TIME LISTENERS ---
