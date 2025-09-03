@@ -14,13 +14,7 @@
     </style>
 </head>
 <body class="text-gray-800">
-    <script>
-        // Script de seguridad para verificar el login del admin
-        if (sessionStorage.getItem('admin-auth-token') !== 'logged_in') {
-            // Redirigir si no está logueado
-            window.location.replace('admin_login.html');
-        }
-    </script>
+    <!-- La verificación de acceso ahora depende exclusivamente de Firebase Auth -->
     <header class="bg-white shadow-md">
         <div class="container mx-auto px-4 py-4 flex justify-between items-center">
             <h1 class="text-2xl font-bold text-gray-900">Dashboard de Fiscalización v2</h1>
@@ -68,7 +62,7 @@
                 <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
                     <h3 class="font-semibold text-lg mb-2">1. Cargar Listas</h3>
                     <p class="text-xs text-gray-500 mb-2">CSV con columnas: `id`, `nombre_lista`.</p>
-                     <a href='data:text/csv;charset=utf-8,id,nombre_lista%0Alista_01,CONSTRUYENDO PORVENIR%0Alista_02,ACCION VECINAL' download="listas_ejemplo_consolidadas.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                     <a href='data:text/csv;charset=utf-8,id;nombre_lista%0Alista_01;CONSTRUYENDO PORVENIR%0Alista_02;ACCION VECINAL' download="listas_ejemplo_consolidadas.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
                     <form class="space-y-3 mt-auto" data-upload-type="listas">
                         <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
                         <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Listas</button>
@@ -78,7 +72,7 @@
                 <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
                     <h3 class="font-semibold text-lg mb-2">2. Cargar Escuelas</h3>
                     <p class="text-xs text-gray-500 mb-2">CSV con: `id`, `nombre`, `lat`, `lng`, `mesas` (separadas por coma: "1001,1002").</p>
-                    <a href='data:text/csv;charset=utf-8,id,nombre,lat,lng,mesas%0A1,Escuela San Martín,-34.468,-58.515,"1001,1002"%0A15,"E.P. N°1 Sarmiento",-34.47,-58.52,"7001,7002"' download="escuelas_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                    <a href='data:text/csv;charset=utf-8,id;nombre;lat;lng;mesas%0A1;Escuela San Martín;-34.468;-58.515;"1001,1002"%0A15;"E.P. N°1 Sarmiento";-34.47;-58.52;"7001,7002"' download="escuelas_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
                     <form class="space-y-3 mt-auto" data-upload-type="escuelas">
                         <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
                         <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Escuelas</button>
@@ -88,7 +82,7 @@
                 <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
                     <h3 class="font-semibold text-lg mb-2">3. Cargar Fiscales</h3>
                     <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `escuela{id}@fiscal.app` con el DNI como contraseña.</p>
-                    <a href='data:text/csv;charset=utf-8,escuela_id,dni%0A15,12345678%0A22,87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                    <a href='data:text/csv;charset=utf-8,escuela_id;dni%0A15;12345678%0A22;87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
                     <form class="space-y-3 mt-auto" data-upload-type="fiscales">
                         <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
                         <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Fiscales</button>
@@ -102,9 +96,10 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script type="module">
-        import { app, db } from '/firebase-config.js';
+        import { app, db, auth } from '/firebase-config.js';
         import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-functions.js";
-        import { collection, onSnapshot, collectionGroup, query, setDoc, doc, writeBatch } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+        import { collection, onSnapshot, collectionGroup, query } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+        import { signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
 
         // --- GLOBAL STATE ---
         let globalData = { listas: {}, escuelas: {}, mesas: {} };
@@ -115,13 +110,18 @@
 
         // --- LOGOUT ---
         const logoutButton = document.getElementById('logout-button');
-        logoutButton.addEventListener('click', () => {
-            sessionStorage.removeItem('admin-auth-token');
+        logoutButton.addEventListener('click', async () => {
+            await signOut(auth);
             window.location.href = 'admin_login.html';
         });
 
         // --- INITIALIZATION ---
-        document.addEventListener('DOMContentLoaded', () => {
+        onAuthStateChanged(auth, (user) => {
+            if (!user) {
+                window.location.replace('admin_login.html');
+                return;
+            }
+
             initMap();
             setupChartToggle();
             setupUploadForms();
@@ -302,13 +302,14 @@
                             const createUsers = httpsCallable(getFunctions(app), 'createUsersFromCSV');
                             const result = await createUsers({ csv: text });
                             showUploadFeedback(result.data.message, result.data.errorCount > 0);
-                             if (result.data.details && result.data.details.length > 0) {
+                            if (result.data.details && result.data.details.length > 0) {
                                 console.warn("Detalles de la carga:", result.data.details);
                             }
                         } else {
-                            const data = parseCSV(text);
-                            await uploadData(type, data);
-                            showUploadFeedback(`¡${data.length} registros de ${type} cargados!`);
+                            const fnName = type === 'listas' ? 'importListasFromCSV' : 'importEscuelasFromCSV';
+                            const importer = httpsCallable(getFunctions(app), fnName);
+                            const result = await importer({ csv: text });
+                            showUploadFeedback(result.data.message, false);
                         }
                     } catch (err) {
                         console.error("Error en carga:", err);
@@ -321,45 +322,6 @@
                     }
                 });
             });
-        }
-
-        function parseCSV(text) {
-            const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-            const header = lines[0].split(',').map(h => h.trim());
-            return lines.slice(1).map(line => {
-                const values = line.split(',');
-                return header.reduce((obj, h, i) => {
-                    obj[h] = values[i].trim().replace(/"/g, '');
-                    return obj;
-                }, {});
-            });
-        }
-
-        async function uploadData(type, data) {
-            const batch = writeBatch(db);
-            switch(type) {
-                case 'listas':
-                    data.forEach(item => {
-                        const docRef = doc(db, "listas", item.id);
-                        batch.set(docRef, { nombre_lista: item.nombre_lista });
-                    });
-                    break;
-                case 'escuelas':
-                     data.forEach(item => {
-                        const docRef = doc(db, "escuelas", item.id);
-                        batch.set(docRef, {
-                            nombre: item.nombre,
-                            lat: parseFloat(item.lat),
-                            lng: parseFloat(item.lng),
-                            mesas: item.mesas.split(',').map(m => m.trim()) // BUG FIX: Changed from ';' to ','
-                        });
-                    });
-                    break;
-                // 'fiscales' case is now handled by the Cloud Function
-            }
-            if (type !== 'fiscales') {
-               await batch.commit();
-            }
         }
 
         function showUploadFeedback(message, isError = false) {
