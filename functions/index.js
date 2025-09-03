@@ -63,7 +63,7 @@ exports.createUsersFromCSV = functions.https.onCall(async (data, context) => {
                 continue;
             }
 
-            const email = `escuela${escuela_id}@fiscal.app`;
+            const email = `${escuela_id}@fiscal.app`;
             const password = dni;
 
             try {
