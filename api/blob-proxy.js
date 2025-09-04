@@ -10,7 +10,12 @@ export default async function handler(request) {
     );
   }
 
-  const { searchParams, pathname: reqPath } = new URL(request.url);
+  // In the Vercel environment, `request.url` can be a relative path. We need to construct a full URL
+  // to be able to parse it correctly.
+  const host = request.headers.get('host');
+  const proto = request.headers.get('x-forwarded-proto') || 'https';
+  const fullUrl = new URL(request.url, `${proto}://${host}`);
+  const { searchParams, pathname: reqPath } = fullUrl;
 
   try {
     if (request.method === 'GET') {
