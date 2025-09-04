@@ -3,7 +3,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebas
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js';
 import { getStorage } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js';
-import { upload } from 'https://cdn.jsdelivr.net/npm/@vercel/blob@0.22.1/dist/index.browser.js';
+import { upload } from 'https://cdn.jsdelivr.net/npm/@vercel/blob@1.1.1/dist/client.js';
 
 // Existing Firebase project configuration
 const firebaseConfig = {
@@ -80,57 +80,16 @@ const blob = {
   },
 
   async put(pathname, body, options = {}) {
-    const isFile = body instanceof File || body instanceof Blob;
-
-    // --- FILE UPLOAD ---
-    // For files, we need a two-step process:
-    // 1. Get a signed URL from our serverless function proxy.
-    // 2. Upload the file directly to that signed URL.
-    if (isFile) {
-      // 1. Get signed URL
-      const signedUrlInfo = await retryFetch(async () => {
-        const response = await fetch('/api/blob-proxy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pathname,
-            // For file uploads, we don't send the body to the proxy.
-            // This signals the proxy to generate a signed URL.
-            options: { ...options, contentType: body.type, allowOverwrite: true },
-          }),
-          signal: createTimeoutSignal(30000),
-        });
-        if (!response.ok) {
-          throw new Error(`Failed to get signed URL: ${await response.text()}`);
-        }
-        return response.json();
-      });
-
-      // 2. Upload the file directly to the signed URL from the browser
-      await retryFetch(async () => {
-        const uploadResponse = await fetch(signedUrlInfo.url, {
-          method: 'PUT',
-          body: body,
-          headers: { 'x-ms-blob-type': 'BlockBlob' }, // Required by Azure Blob Storage
-        });
-        if (!uploadResponse.ok) {
-          throw new Error(`Direct upload failed: ${await uploadResponse.text()}`);
-        }
-      });
-
-      // 3. Return the blob metadata from the first response
-      return signedUrlInfo;
-    }
-
-    // --- DATA UPLOAD ---
-    // For JSON data, we send it directly through the proxy.
+    // This custom put function is now only for data uploads (e.g., JSON strings).
+    // File uploads are handled by the official `upload` function, which is
+    // imported and re-exported by this module.
     return retryFetch(async () => {
       const response = await fetch('/api/blob-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pathname,
-          body, // The body is the JSON string
+          body, // The body is expected to be a JSON-serializable object or string
           options: { ...options, allowOverwrite: true },
         }),
         signal: createTimeoutSignal(30000),
