@@ -308,27 +308,49 @@
         async function uploadData(type, data) {
             switch(type) {
                 case 'listas':
-                    data.forEach(item => {
-                        globalData.listas[item.id] = { nombre_lista: item.nombre_lista };
-                    });
-                    await blob.put('listas.json', JSON.stringify(Object.entries(globalData.listas).map(([id, val]) => ({ id, ...val }))), { contentType: 'application/json', access: 'public' });
+                    // Rebuild the object from the CSV to ensure it's a clean replacement
+                    const new_listas = data.reduce((acc, item) => {
+                        if (item.id) acc[item.id] = { nombre_lista: item.nombre_lista };
+                        return acc;
+                    }, {});
+                    globalData.listas = new_listas;
+                    await blob.put('listas.json', JSON.stringify(Object.values(globalData.listas).map((val, i) => ({ id: Object.keys(globalData.listas)[i], ...val }))), { access: 'public', contentType: 'application/json' });
                     break;
                 case 'escuelas':
-                    data.forEach(item => {
-                        globalData.escuelas[item.id] = {
+                     const new_escuelas = data.reduce((acc, item) => {
+                        if (item.id) acc[item.id] = {
                             nombre: item.nombre,
                             lat: parseFloat(item.lat),
                             lng: parseFloat(item.lng),
-                            mesas: item.mesas.split(',').map(m => m.trim())
+                            mesas: item.mesas.split(',').map(m => m.trim().replace(/"/g, ''))
                         };
-                    });
-                    await blob.put('escuelas.json', JSON.stringify(Object.entries(globalData.escuelas).map(([id, val]) => ({ id, ...val }))), { contentType: 'application/json', access: 'public' });
+                        return acc;
+                    }, {});
+                    globalData.escuelas = new_escuelas;
+                    await blob.put('escuelas.json', JSON.stringify(Object.values(globalData.escuelas).map((val, i) => ({ id: Object.keys(globalData.escuelas)[i], ...val }))), { access: 'public', contentType: 'application/json' });
                     break;
                 case 'fiscales':
-                    await blob.put('fiscales.json', JSON.stringify(data), { contentType: 'application/json', access: 'public' });
+                    // For fiscales, we just upload the parsed data as is.
+                    await blob.put('fiscales.json', JSON.stringify(data), { access: 'public', contentType: 'application/json' });
+                    // Unlike others, we don't load fiscales into globalData for the admin panel
                     break;
             }
+            // After any successful upload, ensure the mesas file exists for the fiscal app
+            await ensureMesasFileExists();
             updateDashboard();
+        }
+
+        async function ensureMesasFileExists() {
+            try {
+                await blob.head('mesas.json');
+            } catch (error) {
+                if (error.status === 404) {
+                    console.log("mesas.json not found. Creating it with default empty object.");
+                    await blob.put('mesas.json', '{}', { access: 'public', contentType: 'application/json' });
+                } else {
+                    console.error("Error checking for mesas.json:", error);
+                }
+            }
         }
 
         function showUploadFeedback(message, isError = false) {

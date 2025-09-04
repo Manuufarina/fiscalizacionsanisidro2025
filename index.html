@@ -65,7 +65,7 @@
             <div class="loader"></div>
         </div>
     </div>
-    
+
     <!-- Modal de feedback -->
     <div id="feedback-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
         <div class="bg-white rounded-lg p-6 text-center shadow-xl">
@@ -73,12 +73,8 @@
         </div>
     </div>
 
-
     <script type="module">
-        import { db, blob } from '/vercel-config.js';
-        import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js";
-        import { doc, getDoc, getDocs, collection, updateDoc, setDoc } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
-        import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js";
+        import { blob } from '/vercel-config.js';
 
         // Elementos del DOM
         const loginScreen = document.getElementById('login-screen');
@@ -89,106 +85,123 @@
         const logoutButton = document.getElementById('logout-button');
         const mesasContainer = document.getElementById('mesas-container');
         const loadingContainer = document.getElementById('loading-container');
-        
-        let listasOficializadas = [];
-        let currentFiscal = null;
 
-        // --- MANEJO DE AUTENTICACIÓN ---
-        onAuthStateChanged(auth, user => {
-            if (user) {
-                // Usuario logueado
-                loadFiscalData(user.uid);
+        let listasOficializadas = {}; // Using an object for O(1) lookups
+        let currentFiscal = null;
+        let globalData = {
+            escuelas: {},
+            mesas: {}
+        };
+
+        // --- AUTH & DATA LOADING ---
+
+        // Check for a logged-in user on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const loggedInFiscal = sessionStorage.getItem('currentFiscal');
+            if (loggedInFiscal) {
+                currentFiscal = JSON.parse(loggedInFiscal);
+                loadInitialData();
             } else {
-                // Usuario no logueado
                 showLoginScreen();
             }
         });
-        
+
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            // Sanitize input to only keep numbers, preventing invalid email format
-            const rawEscuelaId = document.getElementById('escuela-id').value;
-            const escuelaId = rawEscuelaId.replace(/\D/g, '');
+            const escuelaId = document.getElementById('escuela-id').value.replace(/\D/g, '');
             const dni = document.getElementById('dni').value.trim();
-            
-            loginButton.textContent = 'Ingresando...';
+
+            loginButton.textContent = 'Verificando...';
             loginButton.disabled = true;
             loginError.classList.add('hidden');
 
             try {
-                // El email se construye como `{id}@fiscal.app`
-                const email = `${escuelaId}@fiscal.app`;
-                await signInWithEmailAndPassword(auth, email, dni);
-                // onAuthStateChanged se encargará del resto
+                const { blobs } = await blob.list({ prefix: 'fiscales.json' });
+                if (!blobs || blobs.length === 0) throw new Error("No se encontró el archivo de fiscales. Por favor, cárguelo desde el panel de administrador.");
+                const resp = await fetch(blobs[0].url);
+                if (!resp.ok) throw new Error("No se pudo obtener la lista de fiscales.");
+                const fiscales = await resp.json();
+
+                const fiscalEncontrado = fiscales.find(f => f.escuela_id === escuelaId && f.dni === dni);
+
+                if (fiscalEncontrado) {
+                    currentFiscal = fiscalEncontrado;
+                    sessionStorage.setItem('currentFiscal', JSON.stringify(currentFiscal));
+                    loadInitialData();
+                } else {
+                    throw new Error("Credenciales inválidas.");
+                }
+
             } catch (error) {
                 console.error("Error de login:", error);
-                loginError.textContent = 'Escuela o DNI incorrecto.';
+                loginError.textContent = error.message || 'N° de Escuela o DNI incorrecto.';
                 loginError.classList.remove('hidden');
                 loginButton.textContent = 'Ingresar';
                 loginButton.disabled = false;
             }
         });
-        
+
         logoutButton.addEventListener('click', () => {
-            signOut(auth);
+            sessionStorage.removeItem('currentFiscal');
+            currentFiscal = null;
+            // Clear sensitive data
+            globalData = { escuelas: {}, mesas: {} };
+            listasOficializadas = {};
+            showLoginScreen();
         });
-        
-        // --- CARGA DE DATOS ---
-        async function loadFiscalData(fiscalUid) {
+
+        async function loadBlobJSON(name) {
+            const { blobs } = await blob.list({ prefix: `${name}.json` });
+            if (!blobs || blobs.length === 0) {
+                if (name === 'mesas') return {}; // It's okay if mesas.json doesn't exist yet
+                throw new Error(`El archivo de datos '${name}.json' no fue encontrado. Por favor, cárguelo desde el panel de administrador.`);
+            }
+            const res = await fetch(blobs[0].url);
+            if (!res.ok) throw new Error(`No se pudo cargar '${name}.json'.`);
+            const data = await res.json();
+
+            if (Array.isArray(data)) {
+                 return data.reduce((acc, item) => { acc[item.id] = item; return acc; }, {});
+            }
+            return data;
+        }
+
+        async function loadInitialData() {
             try {
-                // 1. Obtener datos del fiscal
-                const fiscalDocRef = doc(db, 'fiscales', fiscalUid);
-                const fiscalDoc = await getDoc(fiscalDocRef);
-                let escuelaId;
+                loadingContainer.classList.remove('hidden');
+                mesasContainer.innerHTML = '';
 
-                if (fiscalDoc.exists()) {
-                    currentFiscal = { uid: fiscalUid, ...fiscalDoc.data() };
-                    escuelaId = currentFiscal.escuela_id;
-                } else {
-                    // Extraer el ID de escuela desde el email si falta el documento del fiscal
-                    const match = auth.currentUser?.email?.match(/^(\d+)@/);
-                    if (!match) throw new Error("Datos de fiscal no encontrados.");
-                    escuelaId = match[1];
-                    currentFiscal = { uid: fiscalUid, escuela_id: escuelaId };
-                    // Persistir el documento del fiscal para futuros ingresos
-                    await setDoc(fiscalDocRef, { escuela_id: escuelaId });
-                }
+                // Load all required data in parallel
+                [globalData.escuelas, listasOficializadas, globalData.mesas] = await Promise.all([
+                    loadBlobJSON('escuelas'),
+                    loadBlobJSON('listas'),
+                    loadBlobJSON('mesas')
+                ]);
 
-                // 2. Obtener datos de la escuela asignada
-                const escuelaDocRef = doc(db, 'escuelas', escuelaId);
-                const escuelaDoc = await getDoc(escuelaDocRef);
-                if (!escuelaDoc.exists()) throw new Error("Datos de escuela no encontrados.");
-                const escuelaData = { id: escuelaDoc.id, ...escuelaDoc.data() };
+                const escuelaData = globalData.escuelas[currentFiscal.escuela_id];
+                if (!escuelaData) throw new Error("No se encontraron los datos de la escuela asignada.");
 
-                // 3. Cargar listas de partidos
-                const listasSnapshot = await getDocs(collection(db, 'listas'));
-                listasOficializadas = listasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-                // 4. Mostrar la app y renderizar mesas
                 showMainApp(escuelaData);
                 renderMesas(escuelaData.mesas);
             } catch (error) {
                 console.error("Error al cargar datos:", error);
-                let userMessage = "Error crítico al cargar los datos. Intente recargar la página.";
-                if (error.message.includes("Datos de escuela no encontrados")) {
-                    userMessage = `La escuela asignada no fue encontrada en la base de datos. Por favor, contacte a un administrador.`;
-                } else if (error.message.includes("Datos de fiscal no encontrados")) {
-                    userMessage = "No se pudo verificar su identidad como fiscal. Por favor, contacte a un administrador.";
-                }
-                alert(userMessage);
-                signOut(auth);
+                alert(`Error crítico: ${error.message}`);
+                logoutButton.click();
+            } finally {
+                loadingContainer.classList.add('hidden');
             }
         }
 
-        async function renderMesas(mesasIds) {
+        function renderMesas(mesasIds) {
             mesasContainer.innerHTML = '';
+            if (!Array.isArray(mesasIds)) {
+                console.error("El formato de mesas en escuelas.json es incorrecto. Se esperaba un array de IDs.");
+                return;
+            }
             for (const mesaId of mesasIds) {
-                const mesaDocRef = doc(db, `escuelas/${currentFiscal.escuela_id}/mesas`, mesaId);
-                const mesaDoc = await getDoc(mesaDocRef);
-                const mesaData = mesaDoc.exists() ? mesaDoc.data() : {};
+                const mesaData = globalData.mesas[mesaId] || {};
                 mesasContainer.appendChild(createMesaElement(mesaId, mesaData));
             }
-            loadingContainer.classList.add('hidden');
         }
 
         // --- RENDERIZADO DEL DOM ---
@@ -210,14 +223,13 @@
         function createMesaElement(mesaId, data) {
             const isCerrada = data.estado === 'cerrada';
             const detailsOpen = !isCerrada ? 'open' : '';
-            
             const mesaWrapper = document.createElement('div');
             mesaWrapper.className = 'bg-white rounded-xl shadow-md';
 
-            let listasHtml = listasOficializadas.map(lista => `
+            let listasHtml = Object.values(listasOficializadas).map(lista => `
                 <div class="grid grid-cols-3 gap-2 items-center">
-                    <label class="text-sm text-gray-600 truncate pr-2">${lista.nombre_lista}</label>
-                    <input type="number" name="senadores_${lista.id}" value="${data.votos?.[lista.id]?.senadores || ''}" ${isCerrada ? 'disabled' : ''} class="w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1">
+                    <label class="text-sm text-gray-600 truncate pr-2" for="senadores_${lista.id}_${mesaId}">${lista.nombre_lista}</label>
+                    <input type="number" id="senadores_${lista.id}_${mesaId}" name="senadores_${lista.id}" value="${data.votos?.[lista.id]?.senadores || ''}" ${isCerrada ? 'disabled' : ''} class="w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1">
                     <input type="number" name="concejales_${lista.id}" value="${data.votos?.[lista.id]?.concejales || ''}" ${isCerrada ? 'disabled' : ''} class="w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1">
                 </div>
             `).join('');
@@ -232,104 +244,83 @@
                     </summary>
                     <form class="mt-6 space-y-4" data-mesa-id="${mesaId}">
                         <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-500">Votantes Habilitados</label>
-                                <input type="number" name="habilitados" value="${data.habilitados || ''}" ${isCerrada ? 'disabled' : ''} required class="mt-1 w-full p-2 border border-gray-300 rounded-md">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-500">Votaron</label>
-                                <input type="number" name="votantes" value="${data.votantes || ''}" ${isCerrada ? 'disabled' : ''} required class="mt-1 w-full p-2 border border-gray-300 rounded-md">
-                            </div>
+                            <div><label class="block text-sm font-medium text-gray-500">Votantes Habilitados</label><input type="number" name="habilitados" value="${data.habilitados || ''}" ${isCerrada ? 'disabled' : ''} required class="mt-1 w-full p-2 border border-gray-300 rounded-md"></div>
+                            <div><label class="block text-sm font-medium text-gray-500">Votaron</label><input type="number" name="votantes" value="${data.votantes || ''}" ${isCerrada ? 'disabled' : ''} required class="mt-1 w-full p-2 border border-gray-300 rounded-md"></div>
                         </div>
-                        <div class="space-y-3 pt-2">
-                             <div class="grid grid-cols-3 gap-2 font-semibold text-center text-gray-700">
-                                <span></span>
-                                <span>Senadores</span>
-                                <span>Concejales</span>
-                            </div>
-                            ${listasHtml}
-                        </div>
+                        <div class="space-y-3 pt-2"><div class="grid grid-cols-3 gap-2 font-semibold text-center text-gray-700"><span></span><span>Senadores</span><span>Concejales</span></div>${listasHtml}</div>
                         <div class="pt-4">
                             <label class="block text-sm font-medium text-gray-500">Certificado de Escrutinio (foto)</label>
-                            ${data.certificadoUrl ? `<a href="${data.certificadoUrl}" target="_blank" class="text-indigo-600 hover:underline">Ver foto cargada</a>` : ''}
-                            <input type="file" name="certificado" accept="image/*" class="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" ${isCerrada ? 'disabled' : ''}>
+                            ${data.certificadoUrl ? `<a href="${data.certificadoUrl}" target="_blank" class="text-indigo-600 hover:underline mt-1 inline-block">Ver foto cargada</a>` : ''}
+                            <input type="file" name="certificado" accept="image/*" class="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" ${isCerrada ? 'disabled' : ''}>
                         </div>
-                         <div class="flex flex-col md:flex-row gap-3 pt-4">
-                             <button type="submit" name="action" value="guardar" class="w-full bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-700 transition-all ${isCerrada ? 'hidden' : ''}">
-                                Guardar Borrador
-                            </button>
-                            <button type="submit" name="action" value="cerrar" class="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition-all ${isCerrada ? 'hidden' : ''}">
-                                Cerrar Mesa Definitivamente
-                            </button>
-                        </div>
+                        <div class="flex flex-col md:flex-row gap-3 pt-4"><button type="submit" name="action" value="guardar" class="w-full bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-700 ${isCerrada ? 'hidden' : ''}">Guardar Borrador</button><button type="submit" name="action" value="cerrar" class="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 ${isCerrada ? 'hidden' : ''}">Cerrar Mesa</button></div>
                     </form>
-                </details>
-            `;
-            
-            // --- MANEJO DE FORMULARIO ---
+                </details>`;
+
             const form = mesaWrapper.querySelector('form');
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const action = e.submitter.value;
-                if (action === 'cerrar') {
-                    if (!confirm('¿Está seguro que desea cerrar la mesa? Esta acción es definitiva y no podrá editar los datos.')) {
-                        return;
-                    }
-                }
-                
-                const submitButton = e.submitter;
-                submitButton.textContent = 'Procesando...';
-                submitButton.disabled = true;
-
-                try {
-                    const formData = new FormData(form);
-                    const mesaId = form.dataset.mesaId;
-                    
-                    const payload = {
-                        habilitados: parseInt(formData.get('habilitados')),
-                        votantes: parseInt(formData.get('votantes')),
-                        votos: {},
-                        lastUpdate: new Date(),
-                        estado: action === 'cerrar' ? 'cerrada' : 'borrador'
-                    };
-                    
-                    listasOficializadas.forEach(lista => {
-                        payload.votos[lista.id] = {
-                            senadores: parseInt(formData.get(`senadores_${lista.id}`)) || 0,
-                            concejales: parseInt(formData.get(`concejales_${lista.id}`)) || 0,
-                        };
-                    });
-
-                    // Subir imagen si existe
-                    const fileInput = form.querySelector('input[type="file"]');
-                    if (fileInput.files[0]) {
-                        const file = fileInput.files[0];
-                        const storageRef = ref(storage, `certificados/${currentFiscal.escuela_id}/${mesaId}/${file.name}`);
-                        const snapshot = await uploadBytes(storageRef, file);
-                        payload.certificadoUrl = await getDownloadURL(snapshot.ref);
-                    }
-
-                    // Guardar en Firestore
-                    const mesaDocRef = doc(db, `escuelas/${currentFiscal.escuela_id}/mesas`, mesaId);
-                    await setDoc(mesaDocRef, payload, { merge: true });
-                    
-                    showFeedback(action === 'cerrar' ? `Mesa ${mesaId} cerrada con éxito.` : `Borrador de mesa ${mesaId} guardado.`);
-                    
-                    // Recargar la vista de la mesa
-                    loadingContainer.classList.remove('hidden');
-                    renderMesas(mesasIds);
-
-                } catch (error) {
-                    console.error("Error al guardar datos de mesa:", error);
-                    alert(`Error al guardar: ${error.message}`);
-                    submitButton.textContent = e.submitter.textContent;
-                    submitButton.disabled = false;
-                }
-            });
-
+            form.addEventListener('submit', handleMesaSubmit);
             return mesaWrapper;
         }
-        
+
+        async function handleMesaSubmit(e) {
+            e.preventDefault();
+            const action = e.submitter.value;
+            if (action === 'cerrar' && !confirm('¿Está seguro que desea cerrar la mesa? Esta acción es definitiva.')) return;
+
+            const form = e.target;
+            const submitButton = e.submitter;
+            const originalButtonText = submitButton.textContent;
+            submitButton.textContent = 'Procesando...';
+            submitButton.disabled = true;
+
+            try {
+                const mesaId = form.dataset.mesaId;
+                const formData = new FormData(form);
+
+                const payload = {
+                    habilitados: parseInt(formData.get('habilitados')),
+                    votantes: parseInt(formData.get('votantes')),
+                    votos: {},
+                    lastUpdate: new Date().toISOString(),
+                    estado: action === 'cerrar' ? 'cerrada' : 'borrador',
+                    escuelaId: currentFiscal.escuela_id
+                };
+
+                Object.keys(listasOficializadas).forEach(listaId => {
+                    payload.votos[listaId] = {
+                        senadores: parseInt(formData.get(`senadores_${listaId}`)) || 0,
+                        concejales: parseInt(formData.get(`concejales_${listaId}`)) || 0,
+                    };
+                });
+
+                const fileInput = form.querySelector('input[type="file"]');
+                if (fileInput.files[0]) {
+                    const file = fileInput.files[0];
+                    const { url } = await blob.put(`certificados/${currentFiscal.escuela_id}-${mesaId}-${file.name}`, file, { access: 'public' });
+                    payload.certificadoUrl = url;
+                }
+
+                // Atomic update of mesas.json
+                const latestMesas = await loadBlobJSON('mesas');
+                latestMesas[mesaId] = { ...(latestMesas[mesaId] || {}), ...payload };
+                await blob.put('mesas.json', JSON.stringify(latestMesas), { access: 'public', contentType: 'application/json' });
+                globalData.mesas = latestMesas;
+
+                showFeedback(action === 'cerrar' ? `Mesa ${mesaId} cerrada con éxito.` : `Borrador de mesa ${mesaId} guardado.`);
+
+                // Re-render just this one mesa
+                const escuelaData = globalData.escuelas[currentFiscal.escuela_id];
+                const newMesaElement = createMesaElement(mesaId, globalData.mesas[mesaId]);
+                form.closest('.bg-white').replaceWith(newMesaElement);
+
+            } catch (error) {
+                console.error("Error al guardar datos de mesa:", error);
+                alert(`Error al guardar: ${error.message}`);
+                submitButton.textContent = originalButtonText;
+                submitButton.disabled = false;
+            }
+        }
+
         function showFeedback(message) {
             const modal = document.getElementById('feedback-modal');
             const msgEl = document.getElementById('feedback-message');
@@ -337,7 +328,6 @@
             modal.classList.remove('hidden');
             setTimeout(() => modal.classList.add('hidden'), 2500);
         }
-
     </script>
 </body>
 </html>
