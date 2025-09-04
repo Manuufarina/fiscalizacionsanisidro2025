@@ -10,10 +10,10 @@ export default async function handler(request) {
     );
   }
 
-  // In the Vercel environment, `request.url` can be a relative path. We need to construct a full URL
-  // to be able to parse it correctly.
-  const host = request.headers.get('host');
-  const proto = request.headers.get('x-forwarded-proto') || 'https';
+  // In the Vercel Node.js runtime, `request.headers` is a plain object, not a Headers object.
+  // We must access headers using bracket notation. Headers are lowercased by Vercel.
+  const host = request.headers['host'];
+  const proto = request.headers['x-forwarded-proto'] || 'https';
   const fullUrl = new URL(request.url, `${proto}://${host}`);
   const { searchParams, pathname: reqPath } = fullUrl;
 
