@@ -65,7 +65,7 @@
             <div class="loader"></div>
         </div>
     </div>
-
+    
     <!-- Modal de feedback -->
     <div id="feedback-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
         <div class="bg-white rounded-lg p-6 text-center shadow-xl">
@@ -76,7 +76,6 @@
     <script type="module">
         import { upload } from 'https://esm.sh/@vercel/blob/client';
 
-        // Elementos del DOM
         const loginScreen = document.getElementById('login-screen');
         const mainApp = document.getElementById('main-app');
         const loginForm = document.getElementById('login-form');
@@ -85,12 +84,11 @@
         const logoutButton = document.getElementById('logout-button');
         const mesasContainer = document.getElementById('mesas-container');
         const loadingContainer = document.getElementById('loading-container');
-
+        
         let listasOficializadas = {};
         let currentFiscal = null;
         let globalData = { escuelas: {}, mesas: {} };
 
-        // --- AUTH & DATA LOADING ---
         document.addEventListener('DOMContentLoaded', () => {
             const loggedInFiscal = sessionStorage.getItem('currentFiscal');
             if (loggedInFiscal) {
@@ -100,18 +98,18 @@
                 showLoginScreen();
             }
         });
-
+        
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const escuelaId = document.getElementById('escuela-id').value.replace(/\D/g, '');
             const dni = document.getElementById('dni').value.trim();
-
+            
             loginButton.textContent = 'Verificando...';
             loginButton.disabled = true;
             loginError.classList.add('hidden');
 
             try {
-                const fiscales = await loadBlobDataset('fiscales', false); // Don't convert to object
+                const fiscales = await loadBlobDataset('fiscales', false);
                 const fiscalEncontrado = fiscales.find(f => f.escuela_id === escuelaId && f.dni === dni);
 
                 if (fiscalEncontrado) {
@@ -129,7 +127,7 @@
                 loginButton.disabled = false;
             }
         });
-
+        
         logoutButton.addEventListener('click', () => {
             sessionStorage.removeItem('currentFiscal');
             currentFiscal = null;
@@ -145,20 +143,22 @@
                 const err = await listRes.json();
                 throw new Error(err.message || `Error fetching list for ${name}.json`);
             }
-
+            
             const { blobs } = await listRes.json();
             if (!blobs || blobs.length === 0) return convertToObject ? {} : [];
 
-            const contentRes = await fetch(blobs[0].url);
+            // Add cache-busting query parameter to the blob URL
+            const cacheBustUrl = `${blobs[0].url}?t=${new Date().getTime()}`;
+            const contentRes = await fetch(cacheBustUrl);
             if (!contentRes.ok) throw new Error(`Could not fetch content for ${name}.json`);
-
+            
             const data = await contentRes.json();
             if (convertToObject && Array.isArray(data)) {
                  return data.reduce((acc, item) => { if (item.id) acc[item.id] = item; return acc; }, {});
             }
             return data;
         }
-
+        
         async function loadInitialData() {
             try {
                 loadingContainer.classList.remove('hidden');
@@ -196,7 +196,6 @@
             }
         }
 
-        // --- RENDERIZADO DEL DOM ---
         function showLoginScreen() {
             loginScreen.classList.remove('hidden');
             mainApp.classList.add('hidden');
@@ -248,7 +247,7 @@
                         <div class="flex flex-col md:flex-row gap-3 pt-4"><button type="submit" name="action" value="guardar" class="w-full bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-700 ${isCerrada ? 'hidden' : ''}">Guardar Borrador</button><button type="submit" name="action" value="cerrar" class="w-full bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 ${isCerrada ? 'hidden' : ''}">Cerrar Mesa</button></div>
                     </form>
                 </details>`;
-
+            
             const form = mesaWrapper.querySelector('form');
             form.addEventListener('submit', handleMesaSubmit);
             return mesaWrapper;
@@ -268,7 +267,7 @@
             try {
                 const mesaId = form.dataset.mesaId;
                 const formData = new FormData(form);
-
+                
                 const payload = {
                     habilitados: parseInt(formData.get('habilitados')),
                     votantes: parseInt(formData.get('votantes')),
@@ -277,7 +276,7 @@
                     estado: action === 'cerrar' ? 'cerrada' : 'borrador',
                     escuelaId: currentFiscal.escuela_id
                 };
-
+                
                 Object.keys(listasOficializadas).forEach(listaId => {
                     payload.votos[listaId] = {
                         senadores: parseInt(formData.get(`senadores_${listaId}`)) || 0,
@@ -297,7 +296,7 @@
 
                 const latestMesas = await loadBlobDataset('mesas');
                 latestMesas[mesaId] = { ...(latestMesas[mesaId] || {}), ...payload };
-
+                
                 const res = await fetch(`/api/put-json?filename=mesas.json`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -308,7 +307,7 @@
                 globalData.mesas = latestMesas;
 
                 showFeedback(action === 'cerrar' ? `Mesa ${mesaId} cerrada con éxito.` : `Borrador de mesa ${mesaId} guardado.`);
-
+                
                 const newMesaElement = createMesaElement(mesaId, globalData.mesas[mesaId]);
                 form.closest('.bg-white').replaceWith(newMesaElement);
 
@@ -319,7 +318,7 @@
                 submitButton.disabled = false;
             }
         }
-
+        
         function showFeedback(message) {
             const modal = document.getElementById('feedback-modal');
             const msgEl = document.getElementById('feedback-message');
