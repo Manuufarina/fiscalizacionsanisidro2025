@@ -1,73 +1,131 @@
-import { list, put, head, del } from '@vercel/blob';
+// api/blob-proxy.js
+const { list, put, head, del } = require('@vercel/blob');
 
-export default async function handler(request) {
+// Increase timeout configuration
+module.exports = async function handler(request, response) {
+  // CORS headers for browser compatibility
+  response.setHeader('Access-Control-Allow-Credentials', true);
+  response.setHeader('Access-Control-Allow-Origin', '*');
+  response.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  response.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+
+  // Handle OPTIONS request for CORS
+  if (request.method === 'OPTIONS') {
+    response.status(200).end();
+    return;
+  }
+
   // IMPORTANT: The project owner must set the BLOB_READ_WRITE_TOKEN environment variable in Vercel.
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) {
-    return new Response(
-      JSON.stringify({ message: 'The BLOB_READ_WRITE_TOKEN environment variable is not set. Please configure it in your Vercel project settings.' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    response.status(500).json({ 
+      message: 'The BLOB_READ_WRITE_TOKEN environment variable is not set. Please configure it in your Vercel project settings.' 
+    });
+    return;
   }
 
-  // In the Vercel Node.js runtime, `request.headers` is a plain object, not a Headers object.
-  // We must access headers using bracket notation. Headers are lowercased by Vercel.
-  const host = request.headers['host'];
-  const proto = request.headers['x-forwarded-proto'] || 'https';
-  const fullUrl = new URL(request.url, `${proto}://${host}`);
-  const { searchParams, pathname: reqPath } = fullUrl;
+  const url = new URL(request.url, `https://${request.headers.host}`);
+  const pathname = url.pathname;
 
   try {
     if (request.method === 'GET') {
-      if (reqPath.startsWith('/api/blob-proxy/head')) {
+      if (pathname.includes('/head')) {
         // Handle blob.head()
-        const pathname = searchParams.get('pathname') || '';
-        if (!pathname) return new Response('Missing "pathname"', { status: 400 });
-
-        try {
-            const headResult = await head(pathname, { token });
-            return new Response(JSON.stringify(headResult), { headers: { 'Content-Type': 'application/json' } });
-        } catch (error) {
-            if (error.status === 404) {
-                 return new Response('Not found', { status: 404 });
-            }
-            throw error;
+        const filePathname = url.searchParams.get('pathname') || '';
+        if (!filePathname) {
+          response.status(400).json({ message: 'Missing "pathname" parameter' });
+          return;
         }
 
+        try {
+          const headResult = await head(filePathname, { token });
+          response.status(200).json(headResult);
+        } catch (error) {
+          if (error.message && error.message.includes('404')) {
+            response.status(404).json({ message: 'Not found' });
+          } else {
+            throw error;
+          }
+        }
       } else {
         // Handle blob.list()
-        const prefix = searchParams.get('prefix') || '';
-        const listResult = await list({ prefix, token });
-        return new Response(JSON.stringify(listResult), { headers: { 'Content-Type': 'application/json' } });
+        const prefix = url.searchParams.get('prefix') || '';
+        const listResult = await list({ 
+          prefix, 
+          token,
+          limit: 1000  // Add limit to avoid timeout on large lists
+        });
+        response.status(200).json(listResult);
       }
     } else if (request.method === 'POST') {
       // Handle blob.put()
-      const { pathname, body, options } = await request.json();
-      if (!pathname || body === undefined) return new Response('Missing "pathname" or "body"', { status: 400 });
+      const body = await new Promise((resolve, reject) => {
+        let data = '';
+        request.on('data', chunk => {
+          data += chunk;
+        });
+        request.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (error) {
+            reject(error);
+          }
+        });
+        request.on('error', reject);
+      });
 
-      const blob = await put(pathname, body, {
+      const { pathname: blobPath, body: blobContent, options } = body;
+      
+      if (!blobPath || blobContent === undefined) {
+        response.status(400).json({ message: 'Missing "pathname" or "body"' });
+        return;
+      }
+
+      const blob = await put(blobPath, blobContent, {
         ...options,
         token,
         addRandomSuffix: false,
       });
-      return new Response(JSON.stringify(blob), { headers: { 'Content-Type': 'application/json' } });
+      
+      response.status(200).json(blob);
     } else if (request.method === 'DELETE') {
-        // Handle blob.del()
-        const { url } = await request.json();
-        if (!url) {
-            return new Response('Missing "url" in request body for delete operation.', { status: 400 });
-        }
-        await del(url, { token });
-        return new Response(null, { status: 204 }); // No Content
-    }
-    else {
-      return new Response(`Method ${request.method} Not Allowed`, { status: 405 });
+      // Handle blob.del()
+      const body = await new Promise((resolve, reject) => {
+        let data = '';
+        request.on('data', chunk => {
+          data += chunk;
+        });
+        request.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (error) {
+            reject(error);
+          }
+        });
+        request.on('error', reject);
+      });
+
+      const { url: blobUrl } = body;
+      if (!blobUrl) {
+        response.status(400).json({ message: 'Missing "url" in request body for delete operation.' });
+        return;
+      }
+      
+      await del(blobUrl, { token });
+      response.status(204).end();
+    } else {
+      response.status(405).json({ message: `Method ${request.method} Not Allowed` });
     }
   } catch (error) {
     console.error("Error in blob proxy:", error);
-    return new Response(JSON.stringify({ message: `Error processing request: ${error.message}` }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
+    response.status(500).json({ 
+      message: `Error processing request: ${error.message}`,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
-}
+};
+
+// Export config to increase timeout (requires Vercel Pro for > 10 seconds)
+module.exports.config = {
+  maxDuration: 30  // Maximum allowed on Hobby plan is 10, Pro/Team allows up to 300
+};
