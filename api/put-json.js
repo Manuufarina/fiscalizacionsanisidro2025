@@ -1,36 +1,28 @@
 import { put } from '@vercel/blob';
 
-// Helper to read the request body stream
-async function streamToString(stream) {
-  const chunks = [];
-  for await (const chunk of stream) {
-    chunks.push(Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks).toString('utf8');
-}
-
 export default async function handler(request, response) {
   const { filename } = request.query;
+  // For the Vercel Node.js runtime, the body is available directly.
+  const body = request.body;
 
   if (request.method !== 'POST') {
     return response.status(405).json({ message: 'Method not allowed' });
   }
-  if (!filename) {
-    return response.status(400).json({ message: 'Missing filename' });
+  if (!filename || !body) {
+    return response.status(400).json({ message: 'Missing filename or body' });
   }
 
   try {
-    const body = await streamToString(request);
-    
+    // The `put` function expects a string or buffer.
+    // Since the client sends a stringified JSON with 'text/plain',
+    // the body should be the raw string.
     const blob = await put(filename, body, {
       access: 'public',
-      contentType: 'application/json',
+      contentType: 'application/json', // We're saving it as JSON
       addRandomSuffix: false,
     });
-
     return response.status(200).json(blob);
   } catch (error) {
     return response.status(500).json({ message: error.message || 'Error uploading file.' });
   }
 }
-
