@@ -1,0 +1,53 @@
+async put(pathname, body, options = {}) {
+    return retryFetch(async () => {
+      const response = await fetch('/api/blob-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pathname,
+          body, // body is already a string here
+          options: {
+            access: options.access,
+            contentType: options.contentType
+          }
+        }),
+        signal: createTimeoutSignal(30000) // 30 second timeout
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to upload blob:', errorText);
+        throw new Error(`Failed to upload blob: ${errorText}`);
+      }
+      return response.json();
+    });
+  },
+
+  async head(pathname = '') {
+    return retryFetch(async () => {
+      const response = await fetch(`/api/blob-proxy/head?pathname=${encodeURIComponent(pathname)}`, {
+        signal: createTimeoutSignal(30000) // 30 second timeout
+      });
+      
+      if (!response.ok) {
+        if(response.status === 404) {
+          const error = new Error('Blob not found');
+          error.status = 404;
+          throw error;
+        }
+        const errorText = await response.text();
+        console.error('Failed to head blob:', errorText);
+        throw new Error(`Failed to head blob: ${errorText}`);
+      }
+      return response.json();
+    });
+  },
+
+  async del(url) {
+    return retryFetch(async () => {
+      const response = await fetch('/api/blob-proxy', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+        signal: createTimeoutSignal(30000) // 30 second timeout
+      });
