@@ -1,40 +1,39 @@
 import { handleUpload } from '@vercel/blob/server';
-import { NextResponse } from 'next/server';
 
-export const config = {
-  runtime: 'edge',
-};
-
-export default async function (request) {
+// This function runs in the Node.js runtime by default.
+export default async function handler(request, response) {
   if (request.method !== 'POST') {
-    return NextResponse.json(
-      { message: 'Method not allowed' },
-      { status: 405 },
-    );
+    return response.status(405).json({ message: 'Method Not Allowed' });
   }
 
-  try {
-    const body = await request.json();
+  // The body is already parsed by Vercel's infrastructure
+  const body = request.body;
 
+  try {
     const jsonResponse = await handleUpload({
       body,
       request,
       onBeforeGenerateToken: async (pathname) => {
+        // This function runs on the server, so we can use environment variables
+        if (!process.env.BLOB_READ_WRITE_TOKEN) {
+          throw new Error('Missing BLOB_READ_WRITE_TOKEN environment variable');
+        }
         return {
           allowedContentTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+          // The token is read from the environment variable
           token: process.env.BLOB_READ_WRITE_TOKEN,
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        // console.log('blob upload completed', blob, tokenPayload);
+        // You can perform actions after the upload is complete here
+        // console.log('Blob upload completed:', blob, tokenPayload);
       },
     });
 
-    return NextResponse.json(jsonResponse);
+    return response.status(200).json(jsonResponse);
   } catch (error) {
-    return NextResponse.json(
-      { message: error.message || 'Failed to upload file.' },
-      { status: 500 },
-    );
+    return response.status(500).json({
+      message: error.message || 'An error occurred during the upload.',
+    });
   }
 }
