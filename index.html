@@ -74,7 +74,7 @@
     </div>
 
     <script type="module">
-        import { blob } from '/vercel-config.js';
+        import { upload } from 'https://esm.sh/@vercel/blob/client';
 
         // Elementos del DOM
         const loginScreen = document.getElementById('login-screen');
@@ -86,16 +86,11 @@
         const mesasContainer = document.getElementById('mesas-container');
         const loadingContainer = document.getElementById('loading-container');
 
-        let listasOficializadas = {}; // Using an object for O(1) lookups
+        let listasOficializadas = {};
         let currentFiscal = null;
-        let globalData = {
-            escuelas: {},
-            mesas: {}
-        };
+        let globalData = { escuelas: {}, mesas: {} };
 
         // --- AUTH & DATA LOADING ---
-
-        // Check for a logged-in user on page load
         document.addEventListener('DOMContentLoaded', () => {
             const loggedInFiscal = sessionStorage.getItem('currentFiscal');
             if (loggedInFiscal) {
@@ -116,12 +111,7 @@
             loginError.classList.add('hidden');
 
             try {
-                const { blobs } = await blob.list({ prefix: 'fiscales.json' });
-                if (!blobs || blobs.length === 0) throw new Error("No se encontró el archivo de fiscales. Por favor, cárguelo desde el panel de administrador.");
-                const resp = await fetch(blobs[0].url);
-                if (!resp.ok) throw new Error("No se pudo obtener la lista de fiscales.");
-                const fiscales = await resp.json();
-
+                const fiscales = await loadBlobDataset('fiscales', false); // Don't convert to object
                 const fiscalEncontrado = fiscales.find(f => f.escuela_id === escuelaId && f.dni === dni);
 
                 if (fiscalEncontrado) {
@@ -131,7 +121,6 @@
                 } else {
                     throw new Error("Credenciales inválidas.");
                 }
-
             } catch (error) {
                 console.error("Error de login:", error);
                 loginError.textContent = error.message || 'N° de Escuela o DNI incorrecto.';
@@ -144,24 +133,28 @@
         logoutButton.addEventListener('click', () => {
             sessionStorage.removeItem('currentFiscal');
             currentFiscal = null;
-            // Clear sensitive data
             globalData = { escuelas: {}, mesas: {} };
             listasOficializadas = {};
             showLoginScreen();
         });
 
-        async function loadBlobJSON(name) {
-            const { blobs } = await blob.list({ prefix: `${name}.json` });
-            if (!blobs || blobs.length === 0) {
-                if (name === 'mesas') return {}; // It's okay if mesas.json doesn't exist yet
-                throw new Error(`El archivo de datos '${name}.json' no fue encontrado. Por favor, cárguelo desde el panel de administrador.`);
+        async function loadBlobDataset(name, convertToObject = true) {
+            const listRes = await fetch(`/api/list-blobs?prefix=${name}.json`);
+            if (!listRes.ok) {
+                if (listRes.status === 404) return convertToObject ? {} : [];
+                const err = await listRes.json();
+                throw new Error(err.message || `Error fetching list for ${name}.json`);
             }
-            const res = await fetch(blobs[0].url);
-            if (!res.ok) throw new Error(`No se pudo cargar '${name}.json'.`);
-            const data = await res.json();
 
-            if (Array.isArray(data)) {
-                 return data.reduce((acc, item) => { acc[item.id] = item; return acc; }, {});
+            const { blobs } = await listRes.json();
+            if (!blobs || blobs.length === 0) return convertToObject ? {} : [];
+
+            const contentRes = await fetch(blobs[0].url);
+            if (!contentRes.ok) throw new Error(`Could not fetch content for ${name}.json`);
+
+            const data = await contentRes.json();
+            if (convertToObject && Array.isArray(data)) {
+                 return data.reduce((acc, item) => { if (item.id) acc[item.id] = item; return acc; }, {});
             }
             return data;
         }
@@ -171,11 +164,10 @@
                 loadingContainer.classList.remove('hidden');
                 mesasContainer.innerHTML = '';
 
-                // Load all required data in parallel
                 [globalData.escuelas, listasOficializadas, globalData.mesas] = await Promise.all([
-                    loadBlobJSON('escuelas'),
-                    loadBlobJSON('listas'),
-                    loadBlobJSON('mesas')
+                    loadBlobDataset('escuelas'),
+                    loadBlobDataset('listas'),
+                    loadBlobDataset('mesas')
                 ]);
 
                 const escuelaData = globalData.escuelas[currentFiscal.escuela_id];
@@ -195,7 +187,7 @@
         function renderMesas(mesasIds) {
             mesasContainer.innerHTML = '';
             if (!Array.isArray(mesasIds)) {
-                console.error("El formato de mesas en escuelas.json es incorrecto. Se esperaba un array de IDs.");
+                console.error("El formato de mesas en escuelas.json es incorrecto.");
                 return;
             }
             for (const mesaId of mesasIds) {
@@ -296,20 +288,27 @@
                 const fileInput = form.querySelector('input[type="file"]');
                 if (fileInput.files[0]) {
                     const file = fileInput.files[0];
-                    const { url } = await blob.put(`certificados/${currentFiscal.escuela_id}-${mesaId}-${file.name}`, file, { access: 'public' });
-                    payload.certificadoUrl = url;
+                    const newBlob = await upload(file.name, file, {
+                      access: 'public',
+                      handleUploadUrl: '/api/upload-image',
+                    });
+                    payload.certificadoUrl = newBlob.url;
                 }
 
-                // Atomic update of mesas.json
-                const latestMesas = await loadBlobJSON('mesas');
+                const latestMesas = await loadBlobDataset('mesas');
                 latestMesas[mesaId] = { ...(latestMesas[mesaId] || {}), ...payload };
-                await blob.put('mesas.json', JSON.stringify(latestMesas), { access: 'public', contentType: 'application/json' });
+
+                const res = await fetch(`/api/put-json?filename=mesas.json`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(latestMesas),
+                });
+                if (!res.ok) throw new Error('Falló la actualización de datos de la mesa.');
+
                 globalData.mesas = latestMesas;
 
                 showFeedback(action === 'cerrar' ? `Mesa ${mesaId} cerrada con éxito.` : `Borrador de mesa ${mesaId} guardado.`);
 
-                // Re-render just this one mesa
-                const escuelaData = globalData.escuelas[currentFiscal.escuela_id];
                 const newMesaElement = createMesaElement(mesaId, globalData.mesas[mesaId]);
                 form.closest('.bg-white').replaceWith(newMesaElement);
 
