@@ -5,7 +5,8 @@ import { getAuth } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-auth
 import { getStorage } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js';
 
 // Vercel Blob client via CDN for dashboard data persistence
-import { put as blobPut, list as blobList, del as blobDel, head as blobHead } from 'https://esm.sh/@vercel/blob@1.1.1';
+// Note: Put and Del have been removed for security. Writes must go through the API.
+import { list as blobList, head as blobHead } from 'https://esm.sh/@vercel/blob@1.1.1';
 
 // Existing Firebase project configuration
 const firebaseConfig = {
@@ -22,19 +23,18 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 const storage = getStorage(app);
 
-// Token for Vercel Blob operations
-const BLOB_TOKEN = 'vercel_blob_rw_t3xlaMIgr85aZOXy_NaxucdEUMociBnvV09S74OqRvTYfs8';
+// IMPORTANT: The read-write token has been removed from client-side code.
+// You MUST provide a Blob Read-Only Token here for the dashboard to work.
+// You can get this from your Vercel project's storage settings.
+const BLOB_READ_ONLY_TOKEN = 'YOUR_BLOB_READ_ONLY_TOKEN_HERE';
 
 const blob = {
-  put: (pathname, body, options = {}) =>
-    blobPut(pathname, body, { token: BLOB_TOKEN, addRandomSuffix: false, ...options }),
+  // put and del have been removed from the client-side helper.
+  // All write operations now go through the /api/put-json endpoint.
   list: (options = {}) =>
-    blobList({ token: BLOB_TOKEN, ...options }),
-  del: (urlOrPathname, options = {}) =>
-    blobDel(urlOrPathname, { token: BLOB_TOKEN, ...options }),
+    blobList({ token: BLOB_READ_ONLY_TOKEN, ...options }),
   head: (urlOrPathname, options = {}) =>
-    blobHead(urlOrPathname, { token: BLOB_TOKEN, ...options })
+    blobHead(urlOrPathname, { token: BLOB_READ_ONLY_TOKEN, ...options })
 };
 
 export { app, db, auth, storage, blob };
-

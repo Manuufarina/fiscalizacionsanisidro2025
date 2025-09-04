@@ -17,7 +17,6 @@
     <script>
         // Script de seguridad para verificar el login del admin
         if (sessionStorage.getItem('admin-auth-token') !== 'logged_in') {
-            // Redirigir si no está logueado
             window.location.replace('admin_login.html');
         }
     </script>
@@ -87,7 +86,7 @@
                 <!-- Cargar Fiscales -->
                 <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
                     <h3 class="font-semibold text-lg mb-2">3. Cargar Fiscales</h3>
-                    <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `{id}@fiscal.app` con el DNI como contraseña.</p>
+                    <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`.</p>
                     <a href='data:text/csv;charset=utf-8,escuela_id;dni%0A15;12345678%0A22;87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
                     <form class="space-y-3 mt-auto" data-upload-type="fiscales">
                         <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
@@ -129,6 +128,7 @@
         // --- LOAD EXISTING DATA FROM BLOB ---
         async function loadExistingData() {
             try {
+                // The client-side blob object from vercel-config is still used for reads.
                 globalData.listas = await loadBlobDataset('listas');
                 globalData.escuelas = await loadBlobDataset('escuelas');
                 globalData.mesas = await loadBlobDataset('mesas');
@@ -178,7 +178,7 @@
                 if (!esc.mesas || esc.mesas.length === 0) return;
                 const mesasDeLaEscuela = esc.mesas.map(id => globalData.mesas[id]).filter(Boolean);
                 const mesasCerradas = mesasDeLaEscuela.filter(m => m.estado === 'cerrada');
-                if (mesasCerradas.length === esc.mesas.length) {
+                if (mesasCerradas.length > 0 && mesasCerradas.length === esc.mesas.length) {
                     escuelasCerradasCount++;
                 }
             });
@@ -265,19 +265,7 @@
             });
         }
 
-        // --- TIMEOUT & UPLOAD ---
-        function withTimeout(promise, ms) {
-            return new Promise((resolve, reject) => {
-                const timeoutId = setTimeout(() => {
-                    reject(new Error(`La operación tardó demasiado (más de ${ms / 1000}s).`));
-                }, ms);
-                promise.then(
-                    res => { clearTimeout(timeoutId); resolve(res); },
-                    err => { clearTimeout(timeoutId); reject(err); }
-                );
-            });
-        }
-
+        // --- UPLOAD LOGIC ---
         function setupUploadForms() {
             document.querySelectorAll('form[data-upload-type]').forEach(form => {
                 form.addEventListener('submit', async (e) => {
@@ -294,7 +282,7 @@
                     try {
                         const text = await file.text();
                         const data = parseCSV(text);
-                        await withTimeout(uploadData(type, data), 20000); // 20-second timeout
+                        await uploadData(type, data);
                         showUploadFeedback(`¡${data.length} registros de ${type} cargados!`);
                     } catch (err) {
                         console.error("Error en carga:", err);
@@ -322,16 +310,21 @@
         }
 
         async function uploadData(type, data) {
+            let filename = '';
+            let body = '';
+
             switch(type) {
                 case 'listas':
+                    filename = 'listas.json';
                     const new_listas = data.reduce((acc, item) => {
                         if (item.id) acc[item.id] = { nombre_lista: item.nombre_lista };
                         return acc;
                     }, {});
                     globalData.listas = new_listas;
-                    await blob.put('listas.json', JSON.stringify(Object.entries(new_listas).map(([id, val]) => ({ id, ...val }))), { access: 'public', contentType: 'application/json' });
+                    body = JSON.stringify(Object.entries(new_listas).map(([id, val]) => ({ id, ...val })));
                     break;
                 case 'escuelas':
+                    filename = 'escuelas.json';
                      const new_escuelas = data.reduce((acc, item) => {
                         if (item.id) acc[item.id] = {
                             nombre: item.nombre,
@@ -342,23 +335,47 @@
                         return acc;
                     }, {});
                     globalData.escuelas = new_escuelas;
-                    await blob.put('escuelas.json', JSON.stringify(Object.entries(new_escuelas).map(([id, val]) => ({ id, ...val }))), { access: 'public', contentType: 'application/json' });
+                    body = JSON.stringify(Object.entries(new_escuelas).map(([id, val]) => ({ id, ...val })));
                     break;
                 case 'fiscales':
-                    await blob.put('fiscales.json', JSON.stringify(data), { access: 'public', contentType: 'application/json' });
+                    filename = 'fiscales.json';
+                    body = JSON.stringify(data);
                     break;
             }
+
+            // Use the new serverless function to handle the upload securely
+            const res = await fetch(`/api/put-json?filename=${filename}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: body,
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.message || 'Error al subir el archivo.');
+            }
+
+            // On success, we should also ensure mesas.json exists
             await ensureMesasFileExists();
             updateDashboard();
         }
 
         async function ensureMesasFileExists() {
+            // This function now calls our API instead of using the blob client directly
             try {
+                // We can check for mesas.json by trying to create it.
+                // A more efficient way is to have a dedicated 'head' API, but for now this is fine.
+                // Let's rely on the client-side `head` which is read-only and should be safe.
                 await blob.head('mesas.json');
             } catch (error) {
                 if (error.status === 404) {
-                    console.log("mesas.json not found. Creating it with default empty object.");
-                    await blob.put('mesas.json', '{}', { access: 'public', contentType: 'application/json' });
+                    console.log("mesas.json not found. Creating it via API.");
+                    const res = await fetch(`/api/put-json?filename=mesas.json`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: '{}',
+                    });
+                    if (!res.ok) console.error("Failed to create mesas.json");
                 } else {
                     console.error("Error checking for mesas.json:", error);
                 }
