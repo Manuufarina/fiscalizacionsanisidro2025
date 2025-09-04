@@ -85,7 +85,6 @@ module.exports = async function handler(request, response) {
         ...options,
         token,
         addRandomSuffix: false,
-        allowOverwrite: true,
       });
       
       response.status(200).json(blob);
