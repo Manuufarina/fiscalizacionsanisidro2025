@@ -88,7 +88,8 @@ const blob = {
           body, // body is already a string here
           options: {
             access: options.access,
-            contentType: options.contentType
+            contentType: options.contentType,
+            allowOverwrite: true
           }
         }),
         signal: createTimeoutSignal(30000) // 30 second timeout
