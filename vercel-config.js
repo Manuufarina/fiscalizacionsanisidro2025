@@ -24,16 +24,23 @@ const storage = getStorage(app);
 
 // Token for Vercel Blob operations
 const BLOB_TOKEN = 'vercel_blob_rw_t3xlaMIgr85aZOXy_NaxucdEUMociBnvV09S74OqRvTYfs8';
+// Use the current origin to avoid cross-origin requests that are blocked by CORS
+const BLOB_ENDPOINT = `${location.origin}/api/blob`;
 
 const blob = {
   put: (pathname, body, options = {}) =>
-    blobPut(pathname, body, { token: BLOB_TOKEN, addRandomSuffix: false, ...options }),
+    blobPut(pathname, body, {
+      token: BLOB_TOKEN,
+      addRandomSuffix: false,
+      endpoint: BLOB_ENDPOINT,
+      ...options
+    }),
   list: (options = {}) =>
-    blobList({ token: BLOB_TOKEN, ...options }),
+    blobList({ token: BLOB_TOKEN, endpoint: BLOB_ENDPOINT, ...options }),
   del: (urlOrPathname, options = {}) =>
-    blobDel(urlOrPathname, { token: BLOB_TOKEN, ...options }),
+    blobDel(urlOrPathname, { token: BLOB_TOKEN, endpoint: BLOB_ENDPOINT, ...options }),
   head: (urlOrPathname, options = {}) =>
-    blobHead(urlOrPathname, { token: BLOB_TOKEN, ...options })
+    blobHead(urlOrPathname, { token: BLOB_TOKEN, endpoint: BLOB_ENDPOINT, ...options })
 };
 
 export { app, db, auth, storage, blob };
