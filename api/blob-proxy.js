@@ -1,6 +1,5 @@
 // api/blob-proxy.js
 const { list, put, head, del } = require('@vercel/blob');
-const { handleUpload } = require('@vercel/blob/server');
 
 // Increase timeout configuration
 module.exports = async function handler(request, response) {
@@ -68,40 +67,34 @@ module.exports = async function handler(request, response) {
         request.on('error', reject);
       });
 
-      // If the body has an `event` property, it's a Vercel Blob client request.
-      // We use `handleUpload` to process it.
-      if (jsonBody.event) {
-        try {
-          const jsonResponse = await handleUpload({
-            body: jsonBody,
-            request,
-            onBeforeGenerateToken: async (pathname) => {
-              // Authorize the upload. For now, allow all image types.
-              return {
-                allowedContentTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
-                // The token payload can be used in onUploadCompleted
-                tokenPayload: JSON.stringify({ pathname }),
-              };
-            },
-            onUploadCompleted: async ({ blob, tokenPayload }) => {
-              console.log('Blob upload completed:', blob, tokenPayload);
-            },
-          });
-          return response.status(200).json(jsonResponse);
-        } catch (error) {
-          return response.status(400).json({ error: error.message });
-        }
+      const { pathname: blobPath, body: blobContent, options } = jsonBody;
+
+      if (!blobPath) {
+        return response.status(400).json({ message: 'Missing "pathname"' });
       }
-      // Otherwise, it's a data upload using our custom method.
-      else {
-        const { pathname: blobPath, body: blobContent, options } = jsonBody;
-        if (!blobPath || blobContent === undefined) {
-          return response.status(400).json({ message: 'Missing "pathname" or "body" for data upload' });
-        }
+
+      // If blobContent is present, it's a data upload (e.g., mesas.json).
+      if (blobContent !== undefined) {
         const blob = await put(blobPath, blobContent, {
           ...options,
           token,
           addRandomSuffix: false,
+        });
+        return response.status(200).json(blob);
+      }
+      // If blobContent is missing, it's a request for a signed URL.
+      else {
+        if (!options || !options.contentLength) {
+          return response.status(400).json({ message: 'Missing "options.contentLength" for signed URL request' });
+        }
+
+        // When the body is `null`, the Vercel Blob SDK generates a signed URL for a PUT request.
+        // `contentLength` is required in this case.
+        const blob = await put(blobPath, null, {
+          ...options,
+          token,
+          addRandomSuffix: false,
+          contentLength: options.contentLength
         });
         return response.status(200).json(blob);
       }

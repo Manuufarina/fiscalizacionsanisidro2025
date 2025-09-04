@@ -3,7 +3,6 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebas
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js';
 import { getStorage } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js';
-import { upload } from 'https://cdn.jsdelivr.net/npm/@vercel/blob@1.1.1/dist/client.js';
 
 // Existing Firebase project configuration
 const firebaseConfig = {
@@ -80,19 +79,61 @@ const blob = {
   },
 
   async put(pathname, body, options = {}) {
-    // This custom put function is now only for data uploads (e.g., JSON strings).
-    // File uploads are handled by the official `upload` function, which is
-    // imported and re-exported by this module.
+    const isFile = body instanceof File || body instanceof Blob;
+
+    // Handle file uploads with a two-step direct upload process
+    if (isFile) {
+      const { size } = body;
+
+      // 1. Get a signed URL from our proxy
+      const signedUrlInfo = await retryFetch(async () => {
+        const response = await fetch('/api/blob-proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pathname,
+            options: {
+              ...options,
+              contentLength: size, // Required for signed URL generation
+              allowOverwrite: true,
+            },
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to get signed URL: ${await response.text()}`);
+        }
+        return response.json();
+      });
+
+      // 2. Upload the file directly to the signed URL
+      await retryFetch(async () => {
+        const uploadResponse = await fetch(signedUrlInfo.url, {
+          method: 'PUT',
+          body: body,
+          headers: {
+            // Azure requires this header for block blobs, which Vercel Blob uses
+            'x-ms-blob-type': 'BlockBlob',
+          },
+        });
+        if (!uploadResponse.ok) {
+          throw new Error(`Direct upload failed: ${await uploadResponse.text()}`);
+        }
+      });
+
+      // 3. Return the blob metadata from the first response
+      return signedUrlInfo;
+    }
+
+    // Handle data (e.g., JSON) uploads by proxying the whole body
     return retryFetch(async () => {
       const response = await fetch('/api/blob-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pathname,
-          body, // The body is expected to be a JSON-serializable object or string
+          body,
           options: { ...options, allowOverwrite: true },
         }),
-        signal: createTimeoutSignal(30000),
       });
 
       if (!response.ok) {
@@ -169,4 +210,4 @@ const blob = {
   }
 };
 
-export { app, db, auth, storage, blob, upload };
+export { app, db, auth, storage, blob };
