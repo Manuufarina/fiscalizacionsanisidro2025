@@ -58,8 +58,8 @@ module.exports = async function handler(request, response) {
         response.status(200).json(listResult);
       }
     } else if (request.method === 'POST') {
-      // Handle blob.put()
-      const body = await new Promise((resolve, reject) => {
+      // Handle blob.put() - can be a data upload or a request for a signed URL
+      const jsonBody = await new Promise((resolve, reject) => {
         let data = '';
         request.on('data', chunk => {
           data += chunk;
@@ -74,17 +74,19 @@ module.exports = async function handler(request, response) {
         request.on('error', reject);
       });
 
-      const { pathname: blobPath, body: blobContent, options } = body;
+      const { pathname: blobPath, body: blobContent, options } = jsonBody;
       
-      if (!blobPath || blobContent === undefined) {
-        response.status(400).json({ message: 'Missing "pathname" or "body"' });
+      if (!blobPath) { // A pathname is always required.
+        response.status(400).json({ message: 'Missing "pathname"' });
         return;
       }
 
-      const blob = await put(blobPath, blobContent, {
+      // If blobContent is provided, it's a data upload (e.g., mesas.json).
+      // If blobContent is not provided, it's a request for a signed URL for a file upload.
+      const blob = await put(blobPath, blobContent || null, { // Pass null body to get a signed URL
         ...options,
         token,
-        addRandomSuffix: false,
+        addRandomSuffix: false, // Preserves original behavior
       });
       
       response.status(200).json(blob);

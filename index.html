@@ -296,16 +296,7 @@
                 const fileInput = form.querySelector('input[type="file"]');
                 if (fileInput.files[0]) {
                     const file = fileInput.files[0];
-
-                    // Convert file to a Base64 Data URL string to safely pass through the proxy
-                    const dataUrl = await new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onloadend = () => resolve(reader.result);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
-                    });
-
-                    const { url } = await blob.put(`certificados/${currentFiscal.escuela_id}-${mesaId}-${file.name}`, dataUrl, { access: 'public' });
+                    const { url } = await blob.put(`certificados/${currentFiscal.escuela_id}-${mesaId}-${file.name}`, file, { access: 'public' });
                     payload.certificadoUrl = url;
                 }
 

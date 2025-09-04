@@ -79,36 +79,69 @@ const blob = {
   },
 
   async put(pathname, body, options = {}) {
+    const isFile = body instanceof File || body instanceof Blob;
+
+    // --- FILE UPLOAD ---
+    // For files, we need a two-step process:
+    // 1. Get a signed URL from our serverless function proxy.
+    // 2. Upload the file directly to that signed URL.
+    if (isFile) {
+      // 1. Get signed URL
+      const signedUrlInfo = await retryFetch(async () => {
+        const response = await fetch('/api/blob-proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pathname,
+            // For file uploads, we don't send the body to the proxy.
+            // This signals the proxy to generate a signed URL.
+            options: { ...options, contentType: body.type, allowOverwrite: true },
+          }),
+          signal: createTimeoutSignal(30000),
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to get signed URL: ${await response.text()}`);
+        }
+        return response.json();
+      });
+
+      // 2. Upload the file directly to the signed URL from the browser
+      await retryFetch(async () => {
+        const uploadResponse = await fetch(signedUrlInfo.url, {
+          method: 'PUT',
+          body: body,
+          headers: { 'x-ms-blob-type': 'BlockBlob' }, // Required by Azure Blob Storage
+        });
+        if (!uploadResponse.ok) {
+          throw new Error(`Direct upload failed: ${await uploadResponse.text()}`);
+        }
+      });
+
+      // 3. Return the blob metadata from the first response
+      return signedUrlInfo;
+    }
+
+    // --- DATA UPLOAD ---
+    // For JSON data, we send it directly through the proxy.
     return retryFetch(async () => {
       const response = await fetch('/api/blob-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pathname,
-          body, // body is already a string here
-          options: {
-            access: options.access,
-            contentType: options.contentType,
-            allowOverwrite: true
-          }
+          body, // The body is the JSON string
+          options: { ...options, allowOverwrite: true },
         }),
-        signal: createTimeoutSignal(30000) // 30 second timeout
+        signal: createTimeoutSignal(30000),
       });
-      
+
       if (!response.ok) {
         let errorText;
-        try {
-          errorText = await response.text();
-        } catch (e) {
-          errorText = 'Unknown error';
-        }
+        try { errorText = await response.text(); } catch (e) { errorText = 'Unknown error'; }
         console.error('Failed to upload blob:', errorText);
-        
-        // Check if it's a token configuration issue
         if (errorText.includes('BLOB_READ_WRITE_TOKEN')) {
           throw new Error('Blob Storage not configured. Please check the README for setup instructions.');
         }
-        
         throw new Error(`Failed to upload blob: ${errorText}`);
       }
       return response.json();
