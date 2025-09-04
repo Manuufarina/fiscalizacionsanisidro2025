@@ -74,7 +74,7 @@
     </div>
 
     <script type="module">
-        import { blob } from '/vercel-config.js';
+        import { blob, upload } from '/vercel-config.js';
 
         // Elementos del DOM
         const loginScreen = document.getElementById('login-screen');
@@ -296,8 +296,16 @@
                 const fileInput = form.querySelector('input[type="file"]');
                 if (fileInput.files[0]) {
                     const file = fileInput.files[0];
-                    const { url } = await blob.put(`certificados/${currentFiscal.escuela_id}-${mesaId}-${file.name}`, file, { access: 'public' });
-                    payload.certificadoUrl = url;
+                    // Use the official Vercel Blob `upload` function for direct-to-storage uploads
+                    const newBlob = await upload(
+                        `certificados/${currentFiscal.escuela_id}-${mesaId}-${file.name}`,
+                        file,
+                        {
+                            access: 'public',
+                            handleUploadUrl: '/api/blob-proxy', // Point to our custom proxy endpoint
+                        }
+                    );
+                    payload.certificadoUrl = newBlob.url;
                 }
 
                 // Atomic update of mesas.json

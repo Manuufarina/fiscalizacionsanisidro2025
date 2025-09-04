@@ -1,5 +1,6 @@
 // api/blob-proxy.js
 const { list, put, head, del } = require('@vercel/blob');
+const { handleUpload } = require('@vercel/blob/server');
 
 // Increase timeout configuration
 module.exports = async function handler(request, response) {
@@ -58,38 +59,52 @@ module.exports = async function handler(request, response) {
         response.status(200).json(listResult);
       }
     } else if (request.method === 'POST') {
-      // Handle blob.put() - can be a data upload or a request for a signed URL
       const jsonBody = await new Promise((resolve, reject) => {
         let data = '';
-        request.on('data', chunk => {
-          data += chunk;
-        });
+        request.on('data', chunk => { data += chunk; });
         request.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch (error) {
-            reject(error);
-          }
+          try { resolve(JSON.parse(data)); } catch (error) { reject(error); }
         });
         request.on('error', reject);
       });
 
-      const { pathname: blobPath, body: blobContent, options } = jsonBody;
-      
-      if (!blobPath) { // A pathname is always required.
-        response.status(400).json({ message: 'Missing "pathname"' });
-        return;
+      // If the body has an `event` property, it's a Vercel Blob client request.
+      // We use `handleUpload` to process it.
+      if (jsonBody.event) {
+        try {
+          const jsonResponse = await handleUpload({
+            body: jsonBody,
+            request,
+            onBeforeGenerateToken: async (pathname) => {
+              // Authorize the upload. For now, allow all image types.
+              return {
+                allowedContentTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+                // The token payload can be used in onUploadCompleted
+                tokenPayload: JSON.stringify({ pathname }),
+              };
+            },
+            onUploadCompleted: async ({ blob, tokenPayload }) => {
+              console.log('Blob upload completed:', blob, tokenPayload);
+            },
+          });
+          return response.status(200).json(jsonResponse);
+        } catch (error) {
+          return response.status(400).json({ error: error.message });
+        }
       }
-
-      // If blobContent is provided, it's a data upload (e.g., mesas.json).
-      // If blobContent is not provided, it's a request for a signed URL for a file upload.
-      const blob = await put(blobPath, blobContent || null, { // Pass null body to get a signed URL
-        ...options,
-        token,
-        addRandomSuffix: false, // Preserves original behavior
-      });
-      
-      response.status(200).json(blob);
+      // Otherwise, it's a data upload using our custom method.
+      else {
+        const { pathname: blobPath, body: blobContent, options } = jsonBody;
+        if (!blobPath || blobContent === undefined) {
+          return response.status(400).json({ message: 'Missing "pathname" or "body" for data upload' });
+        }
+        const blob = await put(blobPath, blobContent, {
+          ...options,
+          token,
+          addRandomSuffix: false,
+        });
+        return response.status(200).json(blob);
+      }
     } else if (request.method === 'DELETE') {
       // Handle blob.del()
       const body = await new Promise((resolve, reject) => {

@@ -3,6 +3,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebas
 import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-auth.js';
 import { getStorage } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-storage.js';
+import { upload } from 'https://cdn.jsdelivr.net/npm/@vercel/blob@0.22.1/dist/index.browser.js';
 
 // Existing Firebase project configuration
 const firebaseConfig = {
@@ -209,4 +210,4 @@ const blob = {
   }
 };
 
-export { app, db, auth, storage, blob };
+export { app, db, auth, storage, blob, upload };
