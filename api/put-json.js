@@ -1,36 +1,29 @@
 import { put } from '@vercel/blob';
 
-export const config = {
-  runtime: 'edge',
-};
+// By default, Vercel runs this as a Node.js serverless function.
+// We remove the edge runtime config to allow Node.js specific modules.
 
-export default async function handler(request) {
-  const { searchParams } = new URL(request.url);
-  const filename = searchParams.get('filename');
+export default async function handler(request, response) {
+  // Use `request.query` for query parameters in Node.js runtime
+  const { filename } = request.query;
 
-  if (!filename || !request.body) {
-    return new Response(JSON.stringify({ message: 'Missing filename or body' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  // The body is already parsed in the Node.js runtime
+  const body = request.body;
+
+  if (!filename || !body) {
+    return response.status(400).json({ message: 'Missing filename or body' });
   }
 
   try {
-    // Vercel's environment will provide the BLOB_READ_WRITE_TOKEN
-    const blob = await put(filename, request.body, {
+    // Vercel's environment provides the BLOB_READ_WRITE_TOKEN
+    const blob = await put(filename, body, {
       access: 'public',
       contentType: 'application/json',
       addRandomSuffix: false,
     });
 
-    return new Response(JSON.stringify(blob), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return response.status(200).json(blob);
   } catch (error) {
-    return new Response(JSON.stringify({ message: error.message || 'Error uploading file.' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return response.status(500).json({ message: error.message || 'Error uploading file.' });
   }
 }
