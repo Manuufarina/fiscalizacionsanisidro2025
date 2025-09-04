@@ -141,7 +141,9 @@
         async function loadBlobDataset(name) {
             const { blobs } = await blob.list({ prefix: `${name}.json` });
             if (!blobs || blobs.length === 0) return {};
-            const res = await fetch(blobs[0].url);
+            // Add a cache-busting query parameter to prevent the browser from serving stale data
+            const url = `${blobs[0].url}?v=${new Date().getTime()}`;
+            const res = await fetch(url);
             const text = await res.text();
             try {
                 const arr = JSON.parse(text);

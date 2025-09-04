@@ -58,46 +58,36 @@ module.exports = async function handler(request, response) {
         response.status(200).json(listResult);
       }
     } else if (request.method === 'POST') {
-      const jsonBody = await new Promise((resolve, reject) => {
+      // Handle blob.put()
+      const body = await new Promise((resolve, reject) => {
         let data = '';
-        request.on('data', chunk => { data += chunk; });
+        request.on('data', chunk => {
+          data += chunk;
+        });
         request.on('end', () => {
-          try { resolve(JSON.parse(data)); } catch (error) { reject(error); }
+          try {
+            resolve(JSON.parse(data));
+          } catch (error) {
+            reject(error);
+          }
         });
         request.on('error', reject);
       });
 
-      const { pathname: blobPath, body: blobContent, options } = jsonBody;
+      const { pathname: blobPath, body: blobContent, options } = body;
 
-      if (!blobPath) {
-        return response.status(400).json({ message: 'Missing "pathname"' });
+      if (!blobPath || blobContent === undefined) {
+        response.status(400).json({ message: 'Missing "pathname" or "body"' });
+        return;
       }
 
-      // If blobContent is present, it's a data upload (e.g., mesas.json).
-      if (blobContent !== undefined) {
-        const blob = await put(blobPath, blobContent, {
-          ...options,
-          token,
-          addRandomSuffix: false,
-        });
-        return response.status(200).json(blob);
-      }
-      // If blobContent is missing, it's a request for a signed URL.
-      else {
-        if (!options || !options.contentLength) {
-          return response.status(400).json({ message: 'Missing "options.contentLength" for signed URL request' });
-        }
+      const blob = await put(blobPath, blobContent, {
+        ...options,
+        token,
+        addRandomSuffix: false,
+      });
 
-        // When the body is `null`, the Vercel Blob SDK generates a signed URL for a PUT request.
-        // `contentLength` is required in this case.
-        const blob = await put(blobPath, null, {
-          ...options,
-          token,
-          addRandomSuffix: false,
-          contentLength: options.contentLength
-        });
-        return response.status(200).json(blob);
-      }
+      response.status(200).json(blob);
     } else if (request.method === 'DELETE') {
       // Handle blob.del()
       const body = await new Promise((resolve, reject) => {

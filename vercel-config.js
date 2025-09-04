@@ -79,52 +79,10 @@ const blob = {
   },
 
   async put(pathname, body, options = {}) {
-    const isFile = body instanceof File || body instanceof Blob;
-
-    // Handle file uploads with a two-step direct upload process
-    if (isFile) {
-      const { size } = body;
-
-      // 1. Get a signed URL from our proxy
-      const signedUrlInfo = await retryFetch(async () => {
-        const response = await fetch('/api/blob-proxy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pathname,
-            options: {
-              ...options,
-              contentLength: size, // Required for signed URL generation
-              allowOverwrite: true,
-            },
-          }),
-        });
-        if (!response.ok) {
-          throw new Error(`Failed to get signed URL: ${await response.text()}`);
-        }
-        return response.json();
-      });
-
-      // 2. Upload the file directly to the signed URL
-      await retryFetch(async () => {
-        const uploadResponse = await fetch(signedUrlInfo.url, {
-          method: 'PUT',
-          body: body,
-          headers: {
-            // Azure requires this header for block blobs, which Vercel Blob uses
-            'x-ms-blob-type': 'BlockBlob',
-          },
-        });
-        if (!uploadResponse.ok) {
-          throw new Error(`Direct upload failed: ${await uploadResponse.text()}`);
-        }
-      });
-
-      // 3. Return the blob metadata from the first response
-      return signedUrlInfo;
-    }
-
-    // Handle data (e.g., JSON) uploads by proxying the whole body
+    // This simple proxy sends all data through the serverless function.
+    // It is suitable for small data and files, but will fail for files
+    // larger than the serverless function's payload size limit (e.g., 4.5MB).
+    // It includes allowOverwrite: true to fix the "blob already exists" error.
     return retryFetch(async () => {
       const response = await fetch('/api/blob-proxy', {
         method: 'POST',
@@ -134,6 +92,7 @@ const blob = {
           body,
           options: { ...options, allowOverwrite: true },
         }),
+        signal: createTimeoutSignal(30000),
       });
 
       if (!response.ok) {
