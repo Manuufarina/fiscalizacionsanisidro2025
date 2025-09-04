@@ -161,7 +161,7 @@
             const mesasArray = Object.values(globalData.mesas);
 
             const totalMesasSistema = escuelasArray.reduce((acc, esc) => acc + (esc.mesas?.length || 0), 0);
-            const mesasCargadas = mesasArray.length;
+            const mesasCargadas = Object.values(globalData.mesas).filter(m => m.estado).length;
             document.getElementById('kpi-mesas-cargadas').textContent = `${mesasCargadas}/${totalMesasSistema}`;
 
             let totalHabilitados = 0;
@@ -175,9 +175,10 @@
 
             let escuelasCerradasCount = 0;
             escuelasArray.forEach(esc => {
-                const mesasDeLaEscuela = mesasArray.filter(m => m.escuelaId === esc.id);
+                if (!esc.mesas || esc.mesas.length === 0) return;
+                const mesasDeLaEscuela = esc.mesas.map(id => globalData.mesas[id]).filter(Boolean);
                 const mesasCerradas = mesasDeLaEscuela.filter(m => m.estado === 'cerrada');
-                if (esc.mesas?.length > 0 && mesasCerradas.length === esc.mesas.length) {
+                if (mesasCerradas.length === esc.mesas.length) {
                     escuelasCerradasCount++;
                 }
             });
@@ -206,13 +207,17 @@
             });
 
             const listasArray = Object.entries(globalData.listas).map(([id, data]) => ({id, ...data}));
-            const chartData = listasArray.map(l => votosPorLista[l.id]).filter(v => v > 0);
-            const chartLabels = listasArray.filter(l => votosPorLista[l.id] > 0).map(l => l.nombre_lista);
-            const chartColors = Array(chartLabels.length).fill(0).map((_, i) => `hsl(${i * 360 / chartLabels.length}, 70%, 50%)`);
+            const chartData = listasArray.map(l => votosPorLista[l.id] || 0);
+            const chartLabels = listasArray.map(l => l.nombre_lista);
+
+            const nonEmptyData = chartData.map((v, i) => ({v, i})).filter(item => item.v > 0);
+            const filteredChartData = nonEmptyData.map(item => item.v);
+            const filteredChartLabels = nonEmptyData.map(item => chartLabels[item.i]);
+            const chartColors = filteredChartLabels.map((_, i) => `hsl(${i * 360 / filteredChartLabels.length}, 70%, 50%)`);
 
             resultsChartInstance = new Chart(ctx, {
                 type: 'doughnut',
-                data: { labels: chartLabels, datasets: [{ data: chartData, backgroundColor: chartColors, borderColor: '#fff' }] },
+                data: { labels: filteredChartLabels, datasets: [{ data: filteredChartData, backgroundColor: chartColors, borderColor: '#fff' }] },
                 options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
             });
         }
@@ -243,24 +248,36 @@
         function updateMap() {
             const greenIcon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
             const redIcon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41] });
-            const mesasArray = Object.values(globalData.mesas);
 
             Object.values(globalData.escuelas).forEach(escuela => {
-                const mesasDeLaEscuela = mesasArray.filter(m => m.escuelaId === escuela.id);
+                if (!escuela.lat || !escuela.lng) return;
+                const mesasDeLaEscuela = (escuela.mesas || []).map(id => globalData.mesas[id]).filter(Boolean);
                 const mesasCerradas = mesasDeLaEscuela.filter(m => m.estado === 'cerrada');
-                const isCerrada = escuela.mesas?.length > 0 && mesasCerradas.length === escuela.mesas.length;
+                const isCerrada = (escuela.mesas?.length > 0) && (mesasCerradas.length === escuela.mesas.length);
 
                 const popupContent = `<b>${escuela.nombre}</b><br>Mesas cargadas: ${mesasDeLaEscuela.length}/${escuela.mesas?.length || 0}`;
 
                 if (mapMarkers[escuela.id]) {
-                    mapMarkers[escuela.id].setIcon(isCerrada ? redIcon : greenIcon).setPopupContent(popupContent);
+                    mapMarkers[escuela.id].setLatLng([escuela.lat, escuela.lng]).setIcon(isCerrada ? redIcon : greenIcon).setPopupContent(popupContent);
                 } else {
                     mapMarkers[escuela.id] = L.marker([escuela.lat, escuela.lng], { icon: isCerrada ? redIcon : greenIcon }).addTo(map).bindPopup(popupContent);
                 }
             });
         }
 
-        // --- CSV UPLOAD ---
+        // --- TIMEOUT & UPLOAD ---
+        function withTimeout(promise, ms) {
+            return new Promise((resolve, reject) => {
+                const timeoutId = setTimeout(() => {
+                    reject(new Error(`La operación tardó demasiado (más de ${ms / 1000}s).`));
+                }, ms);
+                promise.then(
+                    res => { clearTimeout(timeoutId); resolve(res); },
+                    err => { clearTimeout(timeoutId); reject(err); }
+                );
+            });
+        }
+
         function setupUploadForms() {
             document.querySelectorAll('form[data-upload-type]').forEach(form => {
                 form.addEventListener('submit', async (e) => {
@@ -270,20 +287,20 @@
                     if (!file) { showUploadFeedback("Seleccione un archivo.", true); return; }
 
                     const button = e.target.querySelector('button');
+                    const originalButtonText = button.textContent;
                     button.textContent = "Cargando...";
                     button.disabled = true;
 
                     try {
                         const text = await file.text();
                         const data = parseCSV(text);
-                        await uploadData(type, data);
+                        await withTimeout(uploadData(type, data), 20000); // 20-second timeout
                         showUploadFeedback(`¡${data.length} registros de ${type} cargados!`);
                     } catch (err) {
                         console.error("Error en carga:", err);
-                        const errorMessage = err.message || "Ocurrió un error desconocido.";
-                        showUploadFeedback(`Error: ${errorMessage}`, true);
+                        showUploadFeedback(`Error: ${err.message || "Ocurrió un error desconocido."}`, true);
                     } finally {
-                        button.textContent = `Cargar ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+                        button.textContent = originalButtonText;
                         button.disabled = false;
                         form.reset();
                     }
@@ -293,8 +310,7 @@
 
         function parseCSV(text) {
             const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
-            // Soportar archivos CSV separados por punto y coma (Excel en español)
-            const delimiter = lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',';
+            const delimiter = lines[0].includes(';') ? ';' : ',';
             const header = lines[0].split(delimiter).map(h => h.trim());
             return lines.slice(1).map(line => {
                 const values = line.split(delimiter);
@@ -308,13 +324,12 @@
         async function uploadData(type, data) {
             switch(type) {
                 case 'listas':
-                    // Rebuild the object from the CSV to ensure it's a clean replacement
                     const new_listas = data.reduce((acc, item) => {
                         if (item.id) acc[item.id] = { nombre_lista: item.nombre_lista };
                         return acc;
                     }, {});
                     globalData.listas = new_listas;
-                    await blob.put('listas.json', JSON.stringify(Object.values(globalData.listas).map((val, i) => ({ id: Object.keys(globalData.listas)[i], ...val }))), { access: 'public', contentType: 'application/json' });
+                    await blob.put('listas.json', JSON.stringify(Object.entries(new_listas).map(([id, val]) => ({ id, ...val }))), { access: 'public', contentType: 'application/json' });
                     break;
                 case 'escuelas':
                      const new_escuelas = data.reduce((acc, item) => {
@@ -327,15 +342,12 @@
                         return acc;
                     }, {});
                     globalData.escuelas = new_escuelas;
-                    await blob.put('escuelas.json', JSON.stringify(Object.values(globalData.escuelas).map((val, i) => ({ id: Object.keys(globalData.escuelas)[i], ...val }))), { access: 'public', contentType: 'application/json' });
+                    await blob.put('escuelas.json', JSON.stringify(Object.entries(new_escuelas).map(([id, val]) => ({ id, ...val }))), { access: 'public', contentType: 'application/json' });
                     break;
                 case 'fiscales':
-                    // For fiscales, we just upload the parsed data as is.
                     await blob.put('fiscales.json', JSON.stringify(data), { access: 'public', contentType: 'application/json' });
-                    // Unlike others, we don't load fiscales into globalData for the admin panel
                     break;
             }
-            // After any successful upload, ensure the mesas file exists for the fiscal app
             await ensureMesasFileExists();
             updateDashboard();
         }
@@ -357,7 +369,6 @@
             const feedbackEl = document.getElementById('upload-feedback');
             feedbackEl.textContent = message;
             feedbackEl.className = `text-center font-medium mt-4 ${isError ? 'text-red-600' : 'text-green-600'}`;
-            // Don't auto-hide for errors
             if (!isError) {
                 setTimeout(() => { feedbackEl.textContent = ''; }, 6000);
             }
