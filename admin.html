@@ -489,6 +489,7 @@
                         }
                     });
                     globalData.listas = mergedListas;
+                    renderListasTable(); // Forzar la actualización de la tabla de listas
                     dataToUpload = Object.values(globalData.listas);
                     break;
                 case 'escuelas':
