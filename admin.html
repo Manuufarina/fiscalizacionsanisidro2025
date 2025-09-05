@@ -61,41 +61,72 @@
         </div>
 
         <div class="bg-white p-6 rounded-xl shadow-md">
-            <h2 class="text-xl font-bold mb-4">Configuración y Carga de Datos</h2>
-            <p class="text-sm text-gray-600 mb-4">Para un correcto funcionamiento, por favor cargue los archivos en el orden presentado: 1. Listas, 2. Escuelas, y finalmente 3. Fiscales.</p>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <!-- Cargar Listas -->
-                <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
-                    <h3 class="font-semibold text-lg mb-2">1. Cargar Listas</h3>
-                    <p class="text-xs text-gray-500 mb-2">CSV con columnas: `id`, `nombre_lista`.</p>
-                     <a href='data:text/csv;charset=utf-8,id;nombre_lista%0Alista_01;CONSTRUYENDO PORVENIR%0Alista_02;ACCION VECINAL' download="listas_ejemplo_consolidadas.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
-                    <form class="space-y-3 mt-auto" data-upload-type="listas">
-                        <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
-                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Listas</button>
-                    </form>
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8" id="config-tabs">
+                    <button data-tab="listas" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-indigo-500 text-indigo-600">Gestionar Listas</button>
+                    <button data-tab="carga" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">Carga de Archivos</button>
+                </nav>
+            </div>
+
+            <div id="tab-content-listas" class="py-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">Listas Oficializadas</h2>
+                    <button id="save-listas-button" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700">Guardar Cambios</button>
                 </div>
-                <!-- Cargar Escuelas -->
-                <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
-                    <h3 class="font-semibold text-lg mb-2">2. Cargar Escuelas</h3>
-                    <p class="text-xs text-gray-500 mb-2">CSV con: `id`, `nombre`, `lat`, `lng`, `mesas` (separadas por coma: "1001,1002").</p>
-                    <a href='data:text/csv;charset=utf-8,id;nombre;lat;lng;mesas%0A1;Escuela San Martín;-34.468;-58.515;"1001,1002"%0A15;"E.P. N°1 Sarmiento";-34.47;-58.52;"7001,7002"' download="escuelas_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
-                    <form class="space-y-3 mt-auto" data-upload-type="escuelas">
-                        <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
-                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Escuelas</button>
-                    </form>
-                </div>
-                <!-- Cargar Fiscales -->
-                <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
-                    <h3 class="font-semibold text-lg mb-2">3. Cargar Fiscales</h3>
-                    <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `{id}@fiscal.app` con el DNI como contraseña.</p>
-                    <a href='data:text/csv;charset=utf-8,escuela_id;dni%0A15;12345678%0A22;87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
-                    <form class="space-y-3 mt-auto" data-upload-type="fiscales">
-                        <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
-                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Fiscales</button>
-                    </form>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre de Lista</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Habilitada para Senadores</th>
+                                <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Habilitada para Concejales</th>
+                            </tr>
+                        </thead>
+                        <tbody id="listas-table-body" class="bg-white divide-y divide-gray-200">
+                            <!-- Filas de listas se insertarán aquí -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
-             <p id="upload-feedback" class="text-center font-medium mt-4"></p>
+
+            <div id="tab-content-carga" class="hidden py-6">
+                <h2 class="text-xl font-bold mb-4">Configuración y Carga de Datos</h2>
+                <p class="text-sm text-gray-600 mb-4">Para un correcto funcionamiento, por favor cargue los archivos en el orden presentado: 1. Listas, 2. Escuelas, y finalmente 3. Fiscales.</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Cargar Listas -->
+                    <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
+                        <h3 class="font-semibold text-lg mb-2">1. Cargar Listas</h3>
+                        <p class="text-xs text-gray-500 mb-2">CSV con columnas: `id`, `nombre_lista`.</p>
+                         <a href='data:text/csv;charset=utf-8,id;nombre_lista%0Alista_01;CONSTRUYENDO PORVENIR%0Alista_02;ACCION VECINAL' download="listas_ejemplo_consolidadas.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                        <form class="space-y-3 mt-auto" data-upload-type="listas">
+                            <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
+                            <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Listas</button>
+                        </form>
+                    </div>
+                    <!-- Cargar Escuelas -->
+                    <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
+                        <h3 class="font-semibold text-lg mb-2">2. Cargar Escuelas</h3>
+                        <p class="text-xs text-gray-500 mb-2">CSV con: `id`, `nombre`, `lat`, `lng`, `mesas` (separadas por coma: "1001,1002").</p>
+                        <a href='data:text/csv;charset=utf-8,id;nombre;lat;lng;mesas%0A1;Escuela San Martín;-34.468;-58.515;"1001,1002"%0A15;"E.P. N°1 Sarmiento";-34.47;-58.52;"7001,7002"' download="escuelas_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                        <form class="space-y-3 mt-auto" data-upload-type="escuelas">
+                            <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
+                            <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Escuelas</button>
+                        </form>
+                    </div>
+                    <!-- Cargar Fiscales -->
+                    <div class="border border-gray-200 p-4 rounded-lg flex flex-col">
+                        <h3 class="font-semibold text-lg mb-2">3. Cargar Fiscales</h3>
+                        <p class="text-xs text-gray-500 mb-2">CSV con: `escuela_id`, `dni`. Se creará un usuario `{id}@fiscal.app` con el DNI como contraseña.</p>
+                        <a href='data:text/csv;charset=utf-8,escuela_id;dni%0A15;12345678%0A22;87654321' download="fiscales_ejemplo.csv" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-4">Descargar CSV de ejemplo</a>
+                        <form class="space-y-3 mt-auto" data-upload-type="fiscales">
+                            <input type="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".csv" required>
+                            <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-700">Cargar Fiscales</button>
+                        </form>
+                    </div>
+                </div>
+                <p id="upload-feedback" class="text-center font-medium mt-4"></p>
+            </div>
         </div>
     </main>
 
@@ -123,35 +154,95 @@
             initMap();
             setupChartToggle();
             setupUploadForms();
+            setupConfigTabs();
+            setupListasManagement();
             loadExistingData();
         });
+
+        // --- TABS ---
+        function setupConfigTabs() {
+            const tabs = document.querySelectorAll('#config-tabs button');
+            const tabContents = {
+                listas: document.getElementById('tab-content-listas'),
+                carga: document.getElementById('tab-content-carga')
+            };
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // Update button styles
+                    tabs.forEach(t => {
+                        t.classList.remove('border-indigo-500', 'text-indigo-600');
+                        t.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                    });
+                    tab.classList.add('border-indigo-500', 'text-indigo-600');
+                    tab.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+
+                    // Show/hide content
+                    Object.values(tabContents).forEach(content => content.classList.add('hidden'));
+                    tabContents[tab.dataset.tab].classList.remove('hidden');
+                });
+            });
+        }
 
         // --- LOAD EXISTING DATA FROM BLOB ---
         async function loadExistingData() {
             try {
-                globalData.listas = await loadBlobDataset('listas');
-                globalData.escuelas = await loadBlobDataset('escuelas');
-                globalData.mesas = await loadBlobDataset('mesas');
+                // Fetch all data concurrently for faster loading
+                const [listasData, escuelasData, mesasData] = await Promise.all([
+                    loadBlobDataset('listas'),
+                    loadBlobDataset('escuelas'),
+                    loadBlobDataset('mesas')
+                ]);
+                globalData.listas = listasData;
+                globalData.escuelas = escuelasData;
+                globalData.mesas = mesasData;
+
                 updateDashboard();
             } catch (err) {
-                console.warn('No se pudieron cargar datos existentes', err);
+                console.error('Error crítico al cargar datos iniciales:', err);
+                showUploadFeedback('Fallo al cargar datos. Verifique la consola.', true);
             }
         }
 
         async function loadBlobDataset(name) {
-            const { blobs } = await blob.list({ prefix: `${name}.json` });
-            if (!blobs || blobs.length === 0) return {};
-            // Add a cache-busting query parameter to prevent the browser from serving stale data
-            const url = `${blobs[0].url}?v=${new Date().getTime()}`;
-            const res = await fetch(url);
-            const text = await res.text();
             try {
-                const arr = JSON.parse(text);
-                return Array.isArray(arr)
-                    ? arr.reduce((acc, item) => { acc[item.id] = item; return acc; }, {})
-                    : arr;
-            } catch (parseError) {
-                console.warn(`Error parsing ${name}.json`, parseError);
+                const { blobs } = await blob.list({ prefix: `${name}.json` });
+                if (!blobs || blobs.length === 0) {
+                    console.log(`${name}.json no encontrado en el blob storage.`);
+                    return {}; // Return empty object if no file
+                }
+
+                // Add a cache-busting query parameter
+                const url = `${blobs[0].url}?v=${new Date().getTime()}`;
+                const res = await fetch(url, { cache: 'no-store' }); // Explicitly disable cache
+
+                if (!res.ok) {
+                    throw new Error(`HTTP error! status: ${res.status}`);
+                }
+
+                const text = await res.text();
+                if (!text) {
+                    console.warn(`${name}.json está vacío.`);
+                    return {}; // Return empty object if file is empty
+                }
+
+                const data = JSON.parse(text);
+
+                // Standardize data into an object indexed by ID
+                if (Array.isArray(data)) {
+                    return data.reduce((acc, item) => {
+                        if (item && item.id) {
+                            acc[item.id] = item;
+                        }
+                        return acc;
+                    }, {});
+                }
+                // If it's already an object (like mesas.json might be), return as is.
+                return data;
+
+            } catch (err) {
+                console.error(`Error al cargar o procesar ${name}.json:`, err);
+                // Return empty object on any error to prevent crashing the app
                 return {};
             }
         }
@@ -162,6 +253,7 @@
             updateKPIs();
             updateChart();
             updateMap();
+            renderListasTable();
         }
 
         function updateKPIs() {
@@ -268,6 +360,72 @@
             });
         }
 
+        // --- LISTAS MANAGEMENT ---
+        function renderListasTable() {
+            const tableBody = document.getElementById('listas-table-body');
+            tableBody.innerHTML = ''; // Clear existing rows
+            Object.values(globalData.listas).forEach(lista => {
+                const row = `
+                    <tr class="align-middle">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${lista.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <input type="text" value="${lista.nombre_lista}" data-id="${lista.id}" data-field="nombre_lista" class="w-full p-2 border border-gray-300 rounded-md">
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <input type="checkbox" ${lista.senadores ? 'checked' : ''} data-id="${lista.id}" data-field="senadores" class="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <input type="checkbox" ${lista.concejales ? 'checked' : ''} data-id="${lista.id}" data-field="concejales" class="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                        </td>
+                    </tr>
+                `;
+                tableBody.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        function setupListasManagement() {
+            const saveButton = document.getElementById('save-listas-button');
+            const tableBody = document.getElementById('listas-table-body');
+
+            // Disable button initially
+            saveButton.disabled = true;
+
+            // Delegate event listener to the table body
+            tableBody.addEventListener('input', () => {
+                saveButton.disabled = false;
+            });
+
+            saveButton.addEventListener('click', async () => {
+                saveButton.textContent = 'Guardando...';
+                saveButton.disabled = true;
+
+                try {
+                    const updatedListas = {};
+                    document.querySelectorAll('#listas-table-body tr').forEach(row => {
+                        const id = row.querySelector('input[data-id]').dataset.id;
+                        const nombre = row.querySelector('input[data-field="nombre_lista"]').value;
+                        const senadores = row.querySelector('input[data-field="senadores"]').checked;
+                        const concejales = row.querySelector('input[data-field="concejales"]').checked;
+                        updatedListas[id] = { id, nombre_lista: nombre, senadores, concejales };
+                    });
+
+                    globalData.listas = updatedListas;
+                    await blob.put('listas.json', JSON.stringify(Object.values(globalData.listas)), { access: 'public', contentType: 'application/json' });
+
+                    showUploadFeedback('¡Listas actualizadas con éxito!');
+                    // No need to call updateDashboard() here, as the local data is already updated.
+                    // Re-rendering the table would lose focus, which is bad UX.
+                } catch (err) {
+                    console.error("Error guardando listas:", err);
+                    showUploadFeedback(`Error: ${err.message}`, true);
+                } finally {
+                    saveButton.textContent = 'Guardar Cambios';
+                    // The button is re-enabled by the 'input' event listener if more changes are made.
+                }
+            });
+        }
+
+
         // --- CSV UPLOAD ---
         function setupUploadForms() {
             document.querySelectorAll('form[data-upload-type]').forEach(form => {
@@ -314,19 +472,29 @@
         }
 
         async function uploadData(type, data) {
+            let dataToUpload;
             switch(type) {
                 case 'listas':
-                    // Rebuild the object from the CSV to ensure it's a clean replacement
-                    const new_listas = data.reduce((acc, item) => {
-                        if (item.id) acc[item.id] = { nombre_lista: item.nombre_lista };
-                        return acc;
-                    }, {});
-                    globalData.listas = new_listas;
-                    await blob.put('listas.json', JSON.stringify(Object.values(globalData.listas).map((val, i) => ({ id: Object.keys(globalData.listas)[i], ...val }))), { access: 'public', contentType: 'application/json' });
+                    const mergedListas = { ...(globalData.listas || {}) };
+                    data.forEach(item => {
+                        if (item.id) {
+                            const existing = mergedListas[item.id];
+                            mergedListas[item.id] = {
+                                id: item.id,
+                                nombre_lista: item.nombre_lista,
+                                // Preserve existing settings, otherwise default to true
+                                senadores: existing ? existing.senadores : true,
+                                concejales: existing ? existing.concejales : true,
+                            };
+                        }
+                    });
+                    globalData.listas = mergedListas;
+                    dataToUpload = Object.values(globalData.listas);
                     break;
                 case 'escuelas':
                      const new_escuelas = data.reduce((acc, item) => {
                         if (item.id) acc[item.id] = {
+                            id: item.id,
                             nombre: item.nombre,
                             lat: parseFloat(item.lat),
                             lng: parseFloat(item.lng),
@@ -335,14 +503,17 @@
                         return acc;
                     }, {});
                     globalData.escuelas = new_escuelas;
-                    await blob.put('escuelas.json', JSON.stringify(Object.values(globalData.escuelas).map((val, i) => ({ id: Object.keys(globalData.escuelas)[i], ...val }))), { access: 'public', contentType: 'application/json' });
+                    dataToUpload = Object.values(globalData.escuelas);
                     break;
                 case 'fiscales':
-                    // For fiscales, we just upload the parsed data as is.
-                    await blob.put('fiscales.json', JSON.stringify(data), { access: 'public', contentType: 'application/json' });
-                    // Unlike others, we don't load fiscales into globalData for the admin panel
+                    dataToUpload = data; // Fiscales is just a plain array
                     break;
             }
+
+            if (dataToUpload) {
+                 await blob.put(`${type}.json`, JSON.stringify(dataToUpload), { access: 'public', contentType: 'application/json' });
+            }
+
             // After any successful upload, ensure the mesas file exists for the fiscal app
             await ensureMesasFileExists();
             updateDashboard();
