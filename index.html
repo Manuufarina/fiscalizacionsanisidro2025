@@ -250,13 +250,16 @@
             const mesaWrapper = document.createElement('div');
             mesaWrapper.className = 'bg-white rounded-xl shadow-md';
 
-            let listasHtml = Object.values(listasOficializadas).map(lista => `
+            let listasHtml = Object.values(listasOficializadas).map(lista => {
+                const senadoresDisabled = isCerrada || !lista.senadores;
+                const concejalesDisabled = isCerrada || !lista.concejales;
+                return `
                 <div class="grid grid-cols-3 gap-2 items-center">
                     <label class="text-sm text-gray-600 truncate pr-2" for="senadores_${lista.id}_${mesaId}">${lista.nombre_lista}</label>
-                    <input type="number" id="senadores_${lista.id}_${mesaId}" name="senadores_${lista.id}" value="${data.votos?.[lista.id]?.senadores || ''}" ${isCerrada ? 'disabled' : ''} class="w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1">
-                    <input type="number" name="concejales_${lista.id}" value="${data.votos?.[lista.id]?.concejales || ''}" ${isCerrada ? 'disabled' : ''} class="w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1">
+                    <input type="number" id="senadores_${lista.id}_${mesaId}" name="senadores_${lista.id}" value="${data.votos?.[lista.id]?.senadores || ''}" ${senadoresDisabled ? 'disabled' : ''} class="w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1">
+                    <input type="number" name="concejales_${lista.id}" value="${data.votos?.[lista.id]?.concejales || ''}" ${concejalesDisabled ? 'disabled' : ''} class="w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1">
                 </div>
-            `).join('');
+            `}).join('');
 
             mesaWrapper.innerHTML = `
                 <details class="p-4" ${detailsOpen}>
