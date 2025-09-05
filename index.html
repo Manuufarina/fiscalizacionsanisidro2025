@@ -151,19 +151,43 @@
         });
 
         async function loadBlobJSON(name) {
-            const { blobs } = await blob.list({ prefix: `${name}.json` });
-            if (!blobs || blobs.length === 0) {
-                if (name === 'mesas') return {}; // It's okay if mesas.json doesn't exist yet
-                throw new Error(`El archivo de datos '${name}.json' no fue encontrado. Por favor, cárguelo desde el panel de administrador.`);
-            }
-            const res = await fetch(blobs[0].url);
-            if (!res.ok) throw new Error(`No se pudo cargar '${name}.json'.`);
-            const data = await res.json();
+            try {
+                const { blobs } = await blob.list({ prefix: `${name}.json` });
+                if (!blobs || blobs.length === 0) {
+                    if (name === 'mesas') return {}; // It's okay if mesas.json doesn't exist yet
+                    throw new Error(`El archivo de datos '${name}.json' no fue encontrado. Por favor, cárguelo desde el panel de administrador.`);
+                }
 
-            if (Array.isArray(data)) {
-                 return data.reduce((acc, item) => { acc[item.id] = item; return acc; }, {});
+                // Add a cache-busting query parameter and disable cache
+                const url = `${blobs[0].url}?v=${new Date().getTime()}`;
+                const res = await fetch(url, { cache: 'no-store' });
+
+                if (!res.ok) throw new Error(`No se pudo cargar '${name}.json'.`);
+
+                const text = await res.text();
+                if (!text) {
+                    // If the file is empty, return an empty object, especially for mesas.json
+                    return {};
+                }
+
+                const data = JSON.parse(text);
+
+                if (Array.isArray(data)) {
+                    // Filter out any invalid items before reducing
+                    return data.reduce((acc, item) => {
+                        if(item && item.id) {
+                            acc[item.id] = item;
+                        }
+                        return acc;
+                    }, {});
+                }
+                return data;
+            } catch (err) {
+                console.error(`Error al cargar ${name}.json:`, err);
+                // Re-throw the error to be caught by the calling function (loadInitialData)
+                // This ensures the user gets an alert.
+                throw err;
             }
-            return data;
         }
 
         async function loadInitialData() {
