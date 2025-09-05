@@ -253,11 +253,34 @@
             let listasHtml = Object.values(listasOficializadas).map(lista => {
                 const senadoresDisabled = isCerrada || !lista.senadores;
                 const concejalesDisabled = isCerrada || !lista.concejales;
+
+                // Prepare attributes for senadores input
+                let senadoresAttrs = `value="${data.votos?.[lista.id]?.senadores || ''}"`;
+                let senadoresClasses = "w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1";
+                if (senadoresDisabled) {
+                    senadoresAttrs += ' disabled';
+                }
+                if (!lista.senadores) {
+                    senadoresAttrs += ' placeholder="NO USAR"';
+                    senadoresClasses += ' bg-gray-200';
+                }
+
+                // Prepare attributes for concejales input
+                let concejalesAttrs = `value="${data.votos?.[lista.id]?.concejales || ''}"`;
+                let concejalesClasses = "w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1";
+                if (concejalesDisabled) {
+                    concejalesAttrs += ' disabled';
+                }
+                if (!lista.concejales) {
+                    concejalesAttrs += ' placeholder="NO USAR"';
+                    concejalesClasses += ' bg-gray-200';
+                }
+
                 return `
                 <div class="grid grid-cols-3 gap-2 items-center">
                     <label class="text-sm text-gray-600 truncate pr-2" for="senadores_${lista.id}_${mesaId}">${lista.nombre_lista}</label>
-                    <input type="number" id="senadores_${lista.id}_${mesaId}" name="senadores_${lista.id}" value="${data.votos?.[lista.id]?.senadores || ''}" ${senadoresDisabled ? 'disabled' : ''} class="w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1">
-                    <input type="number" name="concejales_${lista.id}" value="${data.votos?.[lista.id]?.concejales || ''}" ${concejalesDisabled ? 'disabled' : ''} class="w-full text-center bg-gray-50 border border-gray-200 rounded-md p-1">
+                    <input type="number" id="senadores_${lista.id}_${mesaId}" name="senadores_${lista.id}" ${senadoresAttrs} class="${senadoresClasses}">
+                    <input type="number" name="concejales_${lista.id}" ${concejalesAttrs} class="${concejalesClasses}">
                 </div>
             `}).join('');
 
@@ -330,7 +353,7 @@
                 // Atomic update of mesas.json
                 const latestMesas = await loadBlobJSON('mesas');
                 latestMesas[mesaId] = { ...(latestMesas[mesaId] || {}), ...payload };
-                await blob.put('mesas.json', JSON.stringify(latestMesas), { access: 'public', contentType: 'application/json' });
+                await blob.put('mesas.json', JSON.stringify(latestMesas), { access: 'public', contentType: 'application/json', cacheControlMaxAge: 0 });
                 globalData.mesas = latestMesas;
 
                 showFeedback(action === 'cerrar' ? `Mesa ${mesaId} cerrada con éxito.` : `Borrador de mesa ${mesaId} guardado.`);
